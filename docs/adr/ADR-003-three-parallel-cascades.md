@@ -57,3 +57,9 @@ CSC-A and CSC-C are realized via the matrix coupling alone. **CSC-B is modeled w
 - PRD §10 (Coupling & Cascade Specification), §10.2 (Three parallel cascades), §12, Appendix B (rough-idea reversal: linear chain → three parallel)
 - §16.2 differentiation metric: "Cascading-failure demonstrations ≥ 3"
 - HP brief: `task/stage1.md` cross-subsystem framing
+- **CSC-B explicit physics — Arrhenius binder viscosity** (`Ea/R = 4500 K` in `src/engine/cascades/csc_b.py`):
+  - Han, C., et al. (2020). *Recent Progress on Polymer Materials for Additive Manufacturing.* Advanced Functional Materials 30, DOI:10.1002/adfm.202003062 — survey of AM-binder polymers (PEG, PVP, PVA) and their viscosity-temperature behavior.
+  - Du, W., et al. (2019). *Jetting Performance of Polyethylene Glycol and Reactive Dye Solutions* — PEG viscosity rheology under jetting conditions, ResearchGate publ. 332635932.
+  - Thermal/rheological data on PEG-400 and PEG-1500 establishing Arrhenius activation energy in our chosen range; see ResearchGate publ. 316713550.
+- **CSC-B explicit physics — Coffin-Manson thermal fatigue** (cycle counting on resistors and heater): foundational Coffin (1954) Trans. ASME 76, 931–950 and Manson (1954) NACA TN-2933; see ADR-006 §"Parameter ranges and citations" for the consolidated parameter table.
+- **CSC-A / CSC-C matrix-only justification** (linear coupling sufficient where physics is dominated by linear effects): see ADR-004 references; mathematical anchor in PRD §10.1.

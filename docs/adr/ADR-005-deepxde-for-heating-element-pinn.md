@@ -60,5 +60,9 @@ The pitch line — *"the heater can't violate physics, the PDE residual is in it
 ## References
 
 - PRD §11.1 (Heating-Element PINN), §18.2 (Libraries), NFR-3 (PINN inference < 5 ms CPU), FR-1.7
-- DeepXDE: Lu et al., *DeepXDE.* SIAM Review, 2021. https://github.com/lululxvi/deepxde
-- Raissi, Perdikaris, Karniadakis. *Physics-informed neural networks.* JCP, 2019.
+- **PINN foundational paper:** Raissi, M., Perdikaris, P., Karniadakis, G. E. (2019). *Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations.* Journal of Computational Physics 378, 686–707. DOI:10.1016/j.jcp.2018.10.045.
+- **DeepXDE library:** Lu, L., Meng, X., Mao, Z., Karniadakis, G. E. (2021). *DeepXDE: A deep learning library for solving differential equations.* SIAM Review 63(1), 208–228. DOI:10.1137/19M1274067. Repo: https://github.com/lululxvi/deepxde.
+- **PINN review (state of the field):** Karniadakis, G. E., Kevrekidis, I. G., Lu, L., Perdikaris, P., Wang, S., Yang, L. (2021). *Physics-informed machine learning.* Nature Reviews Physics 3, 422–440. DOI:10.1038/s42254-021-00314-5.
+- **PINN for heat / diffusion equations specifically:** Cuomo, S., Schiano Di Cola, V., Giampaolo, F., Rozza, G., Raissi, M., Piccialli, F. (2022). *Scientific Machine Learning Through Physics-Informed Neural Networks: Where We Are and What's Next.* J. Sci. Comput. 92, 88. DOI:10.1007/s10915-022-01939-z. Survey covering heat-diffusion PINN benchmarks directly applicable to our 1-D `∂T/∂t = κ ∂²T/∂x²` setup.
+- **Thermal diffusivity κ for refractory heater materials** (anchors our PDE constant): NiCr ~`3e-6`–`5e-6 m²/s`, tungsten ~`6e-5 m²/s`, molybdenum ~`5e-5 m²/s`. Source: CRC Handbook of Chemistry & Physics, 97th ed. (2016), Section 12 — Thermal & Electrical Properties of Metals; H.C. Starck *Refractory Metals for Thermal Management* technical guide (2020).
+- **Coffin-Manson on the heater drift metric** (cross-reference, see ADR-006): Coffin (1954) Trans. ASME 76, 931–950; Manson (1954) NACA TN-2933.
