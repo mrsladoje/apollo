@@ -7,7 +7,7 @@
 | **Document** | Product Requirements Document |
 | **Project** | "Apollo" — Digital Co-Pilot for HP Metal Jet S100 |
 | **Hackathon** | HackUPC 2026 — HP "When AI meets reality" challenge |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Status** | Build-ready draft |
 | **Last updated** | 2026-04-25 |
 | **Owner** | mrsladoje |
@@ -161,6 +161,10 @@ The Apollo experience must be legible to all three personas from the same underl
 | **FR-W.3** | **Savings slide** — closing demo slide presents a defensible per-printer annual savings estimate derived from sim deltas + public AM cost references. | SHOULD | Slide present in deck; sources noted in speaker notes; estimate clearly labeled as modeled savings. |
 | **FR-W.4** | **Component obituary** — when any component transitions to `FAILED`, the system auto-generates a narrative one-paragraph post-mortem stored in the `obituaries` table and surfaced in the UI failure timeline. | SHOULD | Obituary generated within 5 s of failure event; every claim carries a citation. |
 | **FR-W.5** | **Live "Ask Apollo"** — final demo segment supports unscripted live judge questions with grounded answers (or refusals when ungrounded). | SHOULD | Dry-run with 10 wild-card questions: 0 hallucinations. |
+| **FR-W.6** | **Conformal prediction intervals on health forecasts** — every RUL / time-to-failure prediction surfaces a calibrated confidence interval (e.g. `8.0 h ± 2.3 h, 95% CI`) using MAPIE 1.3 wrapped over the existing decay/PINN predictors. | SHOULD | Shaded prediction band rendered on Recharts; coverage validated empirically on a held-out scenario (≥ 90% empirical coverage on a 95% nominal CI). |
+| **FR-W.7** | **Agent observability via Langfuse** — every agent invocation, tool call, latency and token usage is captured by Langfuse through the official Claude Agent SDK OpenTelemetry integration. | SHOULD | `LANGSMITH_OTEL_ENABLED=true`; Langfuse trace UI shows a complete tool-call timeline for the canonical demo query; live trace shown side-by-side during demo. |
+| **FR-W.8** | **Streaming agent responses (SSE)** — the agent narrates token-by-token and emits structured events (`tool-call-start`, `tool-result`, `text-delta`) over Server-Sent Events. | SHOULD | `sse-starlette` `EventSourceResponse` stream consumed by the React client; tool calls visible in the chat panel as they execute, not only after completion. |
+| **FR-W.9** | **Automated grounding eval** — a 30-question evaluation set generated via Ragas `TestsetGenerator` is scored by DeepEval `FaithfulnessMetric` + `HallucinationMetric` in a CI script; the resulting score is rendered in the README. | SHOULD | `deepeval test run` exits 0; faithfulness ≥ 0.95; hallucination = 0; eval set committed under `tests/eval/`. |
 
 ---
 
@@ -299,6 +303,26 @@ Insulation      0      0     0       0       0       —
 - Tools (see FR-3.6): `query_historian`, `late_interaction_search`, `compare_runs`, `run_counterfactual`, `plot_component_history`.
 - Persona: Apollo — first-person, calm, never alarmist (FR-W.1).
 
+### 11.6 Conformal Prediction (FR-W.6)
+
+- Library: **MAPIE 1.3** (`scikit-learn-contrib`, Apr 2026).
+- Wrapper: `MapieTimeSeriesRegressor` with EnbPi block-bootstrap, applied over the per-component decay/PINN predictors.
+- Output: `(point, lower, upper)` triple per forecast horizon, persisted alongside `component_states` and rendered as a shaded band on every health curve.
+- Coverage validation: on a held-out scenario (e.g. *Stressed*), measured empirical coverage of the 95% nominal CI ≥ 90%.
+- Pitch line: *"Apollo's predictions come with calibrated confidence — 'heater fails in 8.0 h ± 2.3 h (95% CI)' is a guarantee, not a guess."*
+
+### 11.7 Observability & Streaming (FR-W.7, FR-W.8)
+
+- **Langfuse** (free cloud tier or self-hosted) attached to the Claude Agent SDK via the OTel integration (`LANGSMITH_OTEL_ENABLED=true`). Captures every prompt, tool call, latency, and token count.
+- **SSE streaming** via `sse-starlette` `EventSourceResponse`. Event schema: `{type: "text-delta" | "tool-call-start" | "tool-result" | "citation" | "done", payload: …}`. React client consumes via raw `EventSource` (no Vercel AI SDK to avoid framework rewrite).
+- Demo move: split-screen the Langfuse trace UI alongside the dashboard during the live "Ask Apollo" segment — judges see the agent's tool graph light up in real time.
+
+### 11.8 Grounding Evaluation (FR-W.9)
+
+- **Ragas `TestsetGenerator`** generates 30 grounded Q/A pairs from the historian's component documentation (component descriptions + sample telemetry windows) — replaces hand-authored eval set.
+- **DeepEval** runs `FaithfulnessMetric` + `HallucinationMetric` over Apollo's responses to those questions in a `pytest`-style CI script.
+- Pass gate (NFR-6): faithfulness ≥ 0.95, hallucination = 0. Result printed in README and demo slide as a measured fact, not a marketing claim.
+
 ---
 
 ## 12. Strategic Product Decisions
@@ -386,6 +410,10 @@ maintenance_events(run_id FK, t, component_id, action, triggered_by)
 -- Failure obituaries (FR-W.4)
 obituaries(run_id FK, component_id, failure_t, narrative, citations_json)
   PRIMARY KEY (run_id, component_id, failure_t)
+
+-- Conformal prediction intervals (FR-W.6)
+forecasts(run_id FK, t, component_id, horizon_min, point, lower, upper, ci_level)
+  PRIMARY KEY (run_id, t, component_id, horizon_min)
 ```
 
 Indexes: `(run_id, t)`, `(run_id, component_id, t)` for the agent's typical query patterns.
@@ -402,7 +430,9 @@ Single-page web dashboard with three primary panels:
 | **Apollo chat** | Natural-language input; responses with visible (collapsible) tool calls; clickable timestamp citations |
 | **What-If** | Pick a regret moment, choose alternate decision, see counterfactual chart + delta number |
 
-**Stack:** Python (FastAPI) backend + SQLite + DeepXDE + DEAP + Anthropic SDK; React + Recharts frontend; WebSocket for live sim updates; Tailwind for polish.
+**Stack:** Python (FastAPI) backend + SQLite + DeepXDE + DEAP + MAPIE + Anthropic SDK + Langfuse OTel + `sse-starlette`; React + Recharts frontend; **SSE for streaming agent responses** (token + tool-call deltas) and live sim updates; Tailwind for polish.
+
+**Streaming behaviour (FR-W.8):** the chat panel renders Apollo's text token-by-token; tool calls appear as collapsible cards the *moment* the tool starts, then update with input/output as events stream. Health-curve charts render conformal prediction bands (FR-W.6) as shaded regions around point forecasts. A small "Trace" link beside each Apollo response opens the corresponding Langfuse run (FR-W.7).
 
 **Sample agent interaction:**
 
@@ -424,6 +454,7 @@ Single-page web dashboard with three primary panels:
 - [ ] All checkboxes in `task/hackathon.md` §6 (Pre-Demo Self-Check) green.
 - [ ] Architecture deck + technical report delivered.
 - [ ] GitHub repo with reproducible README.
+- [ ] Automated grounding eval (FR-W.9) passes: faithfulness ≥ 0.95, hallucination = 0.
 
 ### 16.2 Differentiation metrics (target for winning)
 
@@ -433,8 +464,11 @@ Single-page web dashboard with three primary panels:
 | Uptime delta (AI vs FIXED) | ≥ +25 %, target +34 % |
 | Hallucination rate on eval set | 0 % |
 | Citation coverage on agent responses | 100 % |
-| WOW features shipped | ≥ 4 of 5 (FR-W.1 – W.5) |
+| Demo-differentiator features shipped | ≥ 7 of 9 (FR-W.1 – W.9) |
 | Live-Q&A wild-card grounding | 0 hallucinations across 10 questions |
+| Conformal interval empirical coverage | ≥ 90% on a held-out scenario at 95% nominal CI |
+| DeepEval faithfulness score | ≥ 0.95 |
+| Langfuse trace coverage | 100% of agent invocations captured with tool-call timeline |
 
 ---
 
@@ -451,10 +485,14 @@ Single-page web dashboard with three primary panels:
 | **M7** | Agentic loop + tools + grounding protocol | 5 | TBD | M3, M6 |
 | **M8** | Frontend (3 panels) | 5 | TBD | M3 |
 | **M9** | Demo-differentiator features (Apollo persona, Dark Twin, savings slide, obituary, live-Q&A prep) | 4 | TBD | M7, M8 |
+| **M9b** | **Conformal prediction intervals (MAPIE) + shaded forecast bands** (FR-W.6) | 1.5 | TBD | M1, M8 |
+| **M9c** | **Langfuse observability hookup** (FR-W.7) | 1 | TBD | M7 |
+| **M9d** | **SSE streaming for agent + tool calls** (FR-W.8) | 2.5 | TBD | M7, M8 |
+| **M9e** | **Automated grounding eval (Ragas + DeepEval)** (FR-W.9) | 2.5 | TBD | M7 |
 | **M10** | Polish, slide deck, dry-run demo | 2 | TBD | all |
-| **Total** | | **~40** | | |
+| **Total** | | **~47** | | |
 
-Differentiator-feature work is mostly presentation/prompt-engineering layered on existing infrastructure and can run in parallel with backend integration.
+Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineering layered on existing infrastructure and can run in parallel with backend integration. The plan is intentionally over-budget — M9b–e are the first to be cut if the critical path slips. Cut order: M9e (eval) → M9d (streaming) → M9c (observability) → M9b (conformal). M9b is the highest-ROI add and should ship even if the others slip.
 
 ---
 
@@ -465,6 +503,7 @@ Differentiator-feature work is mostly presentation/prompt-engineering layered on
 - **OpenWeatherMap API** (temperature, humidity)
 - **OpenWeather Air Pollution API / AirNow** (PM2.5)
 - **Anthropic API** (Sonnet-class Claude model for agent reasoning)
+- **Langfuse cloud (free tier)** *or* self-hosted instance — agent observability (FR-W.7)
 
 ### 18.2 Libraries
 
@@ -473,6 +512,10 @@ Differentiator-feature work is mostly presentation/prompt-engineering layered on
 - PyLate (late-interaction retrieval)
 - LightOn LateOn-Code-edge (model artifact, Apache 2.0)
 - Anthropic SDK + Claude Agent SDK
+- **MAPIE 1.3** (conformal prediction, FR-W.6)
+- **Langfuse Python SDK** + `langsmith[claude-agent-sdk]` (OTel auto-tracing, FR-W.7)
+- **`sse-starlette`** (Server-Sent Events streaming, FR-W.8)
+- **Ragas** + **DeepEval** (automated grounding eval, FR-W.9)
 - FastAPI, SQLite, Recharts, React, Tailwind
 
 ### 18.3 Hardware
@@ -549,6 +592,17 @@ Key reversals from initial brainstorm to final PRD:
 - **Dense embeddings for RAG** → replaced with late-interaction (LateOn-Code-edge). Telemetry tokens are code-like.
 - **Full RL maintenance agent** → replaced with GA. Visible evolution, hackathon-feasible, no training instability.
 - **Causal DAG library (DoWhy)** → replaced with simulator-checkpoint branching. We own the sim; statistical causality is overkill.
+- **Time-series foundation models (Chronos-2, TimesFM 2.5, Moirai-MoE)** → rejected. Sledgehammer for 6 simulated components; contradicts the PINN narrative; adds zero physics insight.
+- **Survival analysis (lifelines, scikit-survival)** → rejected. Duplicative with rule-based decay + GA; needs historical failure data we don't have.
+- **PyOD anomaly detection** → rejected. Would create a second source of truth that disagrees with the simulator's ground-truth events on stage.
+- **ECharts swap from Recharts** → rejected. Recharts is sufficient at our data scale; mid-hackathon swaps are a trap.
+- **Local LLM fallback (Ollama + Qwen 2.5)** → rejected. Cannot match Sonnet-class reasoning; tether to phone hotspot if Wi-Fi dies.
+- **Full 3D printer model (React-Three-Fiber)** → rejected. No CC-licensed S100 model exists; an SVG isometric schematic with red overlays is a 1.5 h fallback if visual polish is needed.
+- **Vercel AI SDK for streaming** → rejected. Pure `sse-starlette` + raw `EventSource` avoids a React framework rewrite (FR-W.8).
+- **+ Conformal prediction (MAPIE)** → adopted as FR-W.6 — calibrated CI on every forecast turns "trust me" predictions into "8.0 h ± 2.3 h (95% CI)" with rigorous theoretical guarantees.
+- **+ Langfuse observability** → adopted as FR-W.7 — official Anthropic-blessed Claude Agent SDK integration, free tier, makes the agent reasoning literally visible during the demo.
+- **+ SSE token + tool-call streaming** → adopted as FR-W.8 — Apollo narrates while tools fire one by one, the dashboard "feels alive."
+- **+ Automated grounding eval (Ragas + DeepEval)** → adopted as FR-W.9 — turns NFR-6's "0% hallucination" from a marketing claim into a measured CI artifact.
 
 ---
 
@@ -566,7 +620,7 @@ Mapping of HackUPC brief deliverables to PRD requirements, for evaluator traceab
 | Phase 2 runs identifiable separately | FR-2.4, FR-2.7, §14 |
 | Phase 2 time-series visualization with failure | FR-2.5, FR-2.6 |
 | Phase 3 reads from Phase 2 historian | FR-3.2 |
-| Phase 3 grounded, no hallucinations | FR-3.5, NFR-6 |
+| Phase 3 grounded, no hallucinations | FR-3.5, NFR-6, **FR-W.9** (automated eval) |
 | Phase 3 every answer cites a data point | FR-3.3, NFR-7 |
 | Architecture slide deck | M10 |
 | Technical report | M10 |
