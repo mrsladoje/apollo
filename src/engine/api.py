@@ -38,6 +38,24 @@ def _is_mock() -> bool:
     return os.environ.get("APOLLO_ENGINE") == "mock"
 
 
+# Module-level cache for the component registry. Each component is
+# stateless across step() calls (mutable state lives in the EngineState
+# aggregate per ADR-021), so caching is safe and avoids re-loading the
+# 56 KB PINN weights file on every step. Cache rebuilds when the
+# APOLLO_PINN_FALLBACK env var flips so the R-2 path remains testable.
+_COMPONENT_CACHE = None
+_COMPONENT_CACHE_KEY = None
+
+
+def _components():
+    global _COMPONENT_CACHE, _COMPONENT_CACHE_KEY
+    key = os.environ.get("APOLLO_PINN_FALLBACK", "")
+    if _COMPONENT_CACHE is None or _COMPONENT_CACHE_KEY != key:
+        _COMPONENT_CACHE = build_components()
+        _COMPONENT_CACHE_KEY = key
+    return _COMPONENT_CACHE
+
+
 def initial_state(scenario: str = "default", seed: int = 0) -> EngineState:
     """Construct a fresh EngineState with all 6 components at health=1.0
     (PLAN-A §3.2). RNG state is the seeded numpy Generator state tuple
@@ -46,7 +64,7 @@ def initial_state(scenario: str = "default", seed: int = 0) -> EngineState:
         from engine import mock_engine
         return mock_engine.initial_state(scenario=scenario, seed=seed)
 
-    components = build_components()
+    components = _components()
     drivers0 = Drivers(
         temp_C=20.0,
         humidity=0.5,
@@ -97,7 +115,7 @@ def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState:
     if dt < 0:
         raise ValueError(f"dt must be non-negative, got {dt}")
 
-    components = build_components()
+    components = _components()
     rng = _restore_rng_state(state.rng_state)
 
     # 1) intrinsic decay per component (rule-based or PINN call).
