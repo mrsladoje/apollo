@@ -33,3 +33,7 @@ Cure Binding - Thermal - Insulator, Heater
 - not time-dependent, but on number of thermal cycles
 - the bigger the temp swing per cycle - the less cycles needed to die
 - thermal firing resistors (temp swing 100->300degC), heating element (bigger swings), used along with PINN
+
+## Bit-identical determinism
+
+Allows for proper testing, policy comparison, etc etc...
