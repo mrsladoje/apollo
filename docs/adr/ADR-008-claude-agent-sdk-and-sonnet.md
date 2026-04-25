@@ -1,9 +1,9 @@
 # ADR-008: Claude Agent SDK + Sonnet-class model
 
-- **Status:** Accepted
+- **Status:** Partially superseded by [ADR-022](ADR-022-gemma-4-31b-and-gepa-optimized-prompt.md). The Claude Agent SDK + Pydantic-typed-tools + Langfuse-OTel decision (the *loop framework*) stays in effect. The runtime *model id* is now Gemma 4 31B Dense per ADR-022. Read this ADR for the SDK/loop rationale; read ADR-022 for the model choice.
 - **Date:** 2026-04-25
 - **Deciders:** mrsladoje + team
-- **Related:** PRD §11.5 (Agentic Loop), §18.1, FR-3.2, FR-3.6, FR-W.7, NFR-5; ADR-009 (Pattern C)
+- **Related:** PRD §11.5 (Agentic Loop), §18.1, FR-3.2, FR-3.6, FR-W.7, NFR-5; ADR-009 (Pattern C); ADR-022 (model supersession)
 
 ## Context
 

@@ -165,6 +165,8 @@ The Apollo experience must be legible to all three personas from the same underl
 | **FR-W.7** | **Agent observability via Langfuse** — every agent invocation, tool call, latency and token usage is captured by Langfuse through the official Claude Agent SDK OpenTelemetry integration. | SHOULD | `LANGSMITH_OTEL_ENABLED=true`; Langfuse trace UI shows a complete tool-call timeline for the canonical demo query; live trace shown side-by-side during demo. |
 | **FR-W.8** | **Streaming agent responses (SSE)** — the agent narrates token-by-token and emits structured events (`tool-call-start`, `tool-result`, `text-delta`) over Server-Sent Events. | SHOULD | `sse-starlette` `EventSourceResponse` stream consumed by the React client; tool calls visible in the chat panel as they execute, not only after completion. |
 | **FR-W.9** | **Automated grounding eval** — a 30-question evaluation set generated via Ragas `TestsetGenerator` is scored by DeepEval `FaithfulnessMetric` + `HallucinationMetric` in a CI script; the resulting score is rendered in the README. | SHOULD | `deepeval test run` exits 0; faithfulness ≥ 0.95; hallucination = 0; eval set committed under `tests/eval/`. |
+| **FR-W.10** | **GEPA-compiled system prompt** — Apollo's runtime system prompt is compiled offline by `dspy.GEPA` (Agrawal et al., ICLR 2026 Oral) over the FR-W.9 eval set, with Gemma 4 31B as student LM and Claude Opus 4.7 (via the local `claude` Bash CLI) as reflection LM. Compiled prompt is committed as a frozen artifact. *(ADR-022)* | SHOULD | `scripts/agent/compile_prompt.py` produces `config/agent.system_prompt.gepa.txt`; GEPA optimization log committed under `docs/eval/gepa_compile_log.json`; runtime agent loads the compiled prompt at startup. |
+| **FR-W.11** | **Three-way grounding eval comparison** — the FR-W.9 eval is run against three configurations: vanilla Claude Opus 4.7, vanilla Gemma 4 31B, and Gemma 4 31B + GEPA-compiled prompt. Results render on the closing demo slide as a measured artifact. *(ADR-022, MLH "Best Use of Gemma" / HP narrative)* | SHOULD | All three runs logged under `docs/eval/comparison_results.json`; faithfulness + hallucination scores per config; demo slide quotes the table verbatim; the GEPA-Gemma config is within 2pp of (or beats) the Opus 4.7 baseline on faithfulness. |
 
 ---
 
@@ -298,10 +300,13 @@ Insulation      0      0     0       0       0       —
 
 ### 11.5 Agentic Loop
 
-- Stack: Claude Agent SDK + a current Sonnet-class Claude model for reasoning + tool use. Final model choice is locked during implementation based on API availability and latency.
+- **Loop framework:** Claude Agent SDK (Pydantic-typed tools, OTel hookup, refusal handling) — unchanged from the original architecture.
+- **Runtime model:** **Gemma 4 31B Dense** (Google, 2026-04-02, Apache 2.0), accessed via the MLH-issued API key, wired through DSPy's `dspy.LM` adapter (`openai/google/gemma-4-31B-it`, OpenAI-compatible). *(supersedes the original Sonnet-class pin per ADR-022)*
+- **Compiled system prompt:** Apollo's prompt is **not hand-written** — it is compiled offline by `dspy.GEPA` (Genetic-Pareto reflective prompt evolution; Agrawal et al., arXiv:2507.19457, ICLR 2026 Oral) using the FR-W.9 eval set as the optimization target. Reflection LM is Claude Opus 4.7 (via local `claude` Bash CLI). Compiled artifact: `config/agent.system_prompt.gepa.txt`. (FR-W.10)
 - Pattern: Pattern C — Agentic Diagnosis (highest tier in brief).
 - Tools (see FR-3.6): `query_historian`, `late_interaction_search`, `compare_runs`, `run_counterfactual`, `plot_component_history`.
-- Persona: Apollo — first-person, calm, never alarmist (FR-W.1).
+- Persona: Apollo — first-person, calm, never alarmist (FR-W.1). The Apollo persona text is part of the GEPA-compiled prompt; the persona-token-budget guard from ADR-019 still applies as a CI check on the compiled output.
+- **Pitch line:** *"Apollo runs on a 31B open-weight model, with a system prompt evolved over 150 GEPA rollouts against our own grounding eval — the same paradigm Databricks used to push gpt-oss-120b past Claude Opus 4.1."*
 
 ### 11.6 Conformal Prediction (FR-W.6)
 
@@ -317,11 +322,13 @@ Insulation      0      0     0       0       0       —
 - **SSE streaming** via `sse-starlette` `EventSourceResponse`. Event schema: `{type: "text-delta" | "tool-call-start" | "tool-result" | "citation" | "done", payload: …}`. React client consumes via raw `EventSource` (no Vercel AI SDK to avoid framework rewrite).
 - Demo move: split-screen the Langfuse trace UI alongside the dashboard during the live "Ask Apollo" segment — judges see the agent's tool graph light up in real time.
 
-### 11.8 Grounding Evaluation (FR-W.9)
+### 11.8 Grounding Evaluation (FR-W.9 / FR-W.10 / FR-W.11)
 
 - **Ragas `TestsetGenerator`** generates 30 grounded Q/A pairs from the historian's component documentation (component descriptions + sample telemetry windows) — replaces hand-authored eval set.
 - **DeepEval** runs `FaithfulnessMetric` + `HallucinationMetric` over Apollo's responses to those questions in a `pytest`-style CI script.
 - Pass gate (NFR-6): faithfulness ≥ 0.95, hallucination = 0. Result printed in README and demo slide as a measured fact, not a marketing claim.
+- **Dual role of the eval set (ADR-022):** the FR-W.9 set doubles as the **GEPA optimization target** for FR-W.10. `scripts/agent/compile_prompt.py` runs `dspy.GEPA` over the same Q/A triples with a `metric_with_feedback` that combines DeepEval faithfulness + schema-validity + correct-tool-selection + citation-resolves-against-historian. Optimization is offline (~150 metric calls, ~2-4 hours), not part of CI. The compiled prompt is then re-evaluated against the held-out portion of the same set in the standard FR-W.9 pipeline, so the gate that ships Apollo is independent of the gate that compiled it.
+- **Three-way comparison (FR-W.11):** the same eval pipeline is run against vanilla Opus 4.7, vanilla Gemma 4 31B, and Gemma 4 31B + GEPA-compiled prompt. Faithfulness, hallucination, and per-question pass-rate are logged to `docs/eval/comparison_results.json` and rendered as a table on the closing demo slide. This is the MLH "Best Use of Gemma" / HP narrative artifact: *"31B open model + 150 GEPA rollouts ≥ frontier closed model on the gate the demo claims to pass."*
 
 ---
 
@@ -377,6 +384,8 @@ These decisions are carried forward from the original rough-idea document and ar
 ┌────────────────── Phase 3: Apollo (Agentic Co-Pilot, text) ────────────────────────┐
 │                                                                                    │
 │   user query  ──►  agent loop (Claude Agent SDK)                                   │
+│                    runtime LM: Gemma 4 31B Dense (ADR-022)                         │
+│                    system prompt: GEPA-compiled (DSPy + dspy.GEPA, FR-W.10)        │
 │                    tools: query_historian, late_interaction_search,                │
 │                           compare_runs, run_counterfactual,                        │
 │                           plot_component_history                                   │
@@ -384,6 +393,11 @@ These decisions are carried forward from the original rough-idea document and ar
 │                                                                                    │
 │   UI: chat panel with VISIBLE tool calls; charts; clickable citations              │
 │        + Dark Twin comparison panel + What-If panel + Obituary timeline            │
+│                                                                                    │
+│   Offline (one-shot, scripts/agent/compile_prompt.py):                             │
+│     dspy.GEPA(student=Gemma 4 31B, reflection=Opus 4.7 via `claude` CLI,           │
+│               metric=Ragas+DeepEval over FR-W.9 set, max_metric_calls=150)         │
+│     ──► config/agent.system_prompt.gepa.txt   (committed artifact)                 │
 │                                                                                    │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -430,7 +444,7 @@ Single-page web dashboard with three primary panels:
 | **Apollo chat** | Natural-language input; responses with visible (collapsible) tool calls; clickable timestamp citations |
 | **What-If** | Pick a regret moment, choose alternate decision, see counterfactual chart + delta number |
 
-**Stack:** Python (FastAPI) backend + SQLite + DeepXDE + DEAP + MAPIE + Anthropic SDK + Langfuse OTel + `sse-starlette`; React + Recharts frontend; **SSE for streaming agent responses** (token + tool-call deltas) and live sim updates; Tailwind for polish.
+**Stack:** Python (FastAPI) backend + SQLite + DeepXDE + DEAP + MAPIE + Claude Agent SDK (loop framework only — runtime LM is Gemma 4 31B per ADR-022) + DSPy (`dspy.GEPA` for offline prompt compile) + Langfuse OTel + `sse-starlette`; React + Recharts frontend; **SSE for streaming agent responses** (token + tool-call deltas) and live sim updates; Tailwind for polish.
 
 **Streaming behaviour (FR-W.8):** the chat panel renders Apollo's text token-by-token; tool calls appear as collapsible cards the *moment* the tool starts, then update with input/output as events stream. Health-curve charts render conformal prediction bands (FR-W.6) as shaded regions around point forecasts. A small "Trace" link beside each Apollo response opens the corresponding Langfuse run (FR-W.7).
 
@@ -464,7 +478,8 @@ Single-page web dashboard with three primary panels:
 | Uptime delta (AI vs FIXED) | ≥ +25 %, target +34 % |
 | Hallucination rate on eval set | 0 % |
 | Citation coverage on agent responses | 100 % |
-| Demo-differentiator features shipped | ≥ 7 of 9 (FR-W.1 – W.9) |
+| Demo-differentiator features shipped | ≥ 8 of 11 (FR-W.1 – W.11) |
+| GEPA-Gemma vs vanilla-Opus-4.7 on FR-W.9 eval | within 2pp on faithfulness, hallucination = 0 on both |
 | Live-Q&A wild-card grounding | 0 hallucinations across 10 questions |
 | Conformal interval empirical coverage | ≥ 90% on a held-out scenario at 95% nominal CI |
 | DeepEval faithfulness score | ≥ 0.95 |
@@ -489,10 +504,11 @@ Single-page web dashboard with three primary panels:
 | **M9c** | **Langfuse observability hookup** (FR-W.7) | 1 | TBD | M7 |
 | **M9d** | **SSE streaming for agent + tool calls** (FR-W.8) | 2.5 | TBD | M7, M8 |
 | **M9e** | **Automated grounding eval (Ragas + DeepEval)** (FR-W.9) | 2.5 | TBD | M7 |
+| **M9f** | **GEPA prompt compile + three-way comparison** (FR-W.10, FR-W.11; ADR-022) | 4 | TBD | M7, M9e |
 | **M10** | Polish, slide deck, dry-run demo | 2 | TBD | all |
-| **Total** | | **~47** | | |
+| **Total** | | **~51** | | |
 
-Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineering layered on existing infrastructure and can run in parallel with backend integration. The plan is intentionally over-budget — M9b–e are the first to be cut if the critical path slips. Cut order: M9e (eval) → M9d (streaming) → M9c (observability) → M9b (conformal). M9b is the highest-ROI add and should ship even if the others slip.
+Differentiator-feature work (M9, M9b–f) is mostly presentation/prompt-engineering layered on existing infrastructure and can run in parallel with backend integration. The plan is intentionally over-budget — M9b–f are the first to be cut if the critical path slips. Cut order: M9d (streaming) → M9b (conformal) → M9c (observability) → M9e (eval). **M9f (GEPA compile + comparison) is NOT in the cut order** — it is the MLH "Best Use of Gemma" submission gate per ADR-022 and ships even if other M9 items slip. M9e is a hard prerequisite for M9f (the eval set is the GEPA optimization target), so M9e is similarly protected.
 
 ---
 
@@ -502,7 +518,8 @@ Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineer
 
 - **OpenWeatherMap API** (temperature, humidity)
 - **OpenWeather Air Pollution API / AirNow** (PM2.5)
-- **Anthropic API** (Sonnet-class Claude model for agent reasoning)
+- **Gemma 4 31B Dense API** (MLH-issued key) — Apollo's runtime LM (ADR-022)
+- **Local `claude` Bash CLI → Claude Opus 4.7** — used in two places: GEPA reflection LM during offline prompt compile (FR-W.10), and the comparator baseline in the three-way grounding eval (FR-W.11)
 - **Langfuse cloud (free tier)** *or* self-hosted instance — agent observability (FR-W.7)
 
 ### 18.2 Libraries
@@ -511,7 +528,8 @@ Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineer
 - DEAP (genetic algorithm)
 - PyLate (late-interaction retrieval)
 - LightOn LateOn-Code-edge (model artifact, Apache 2.0)
-- Anthropic SDK + Claude Agent SDK
+- Claude Agent SDK *(loop framework only — runtime model is Gemma per ADR-022)*
+- **DSPy** + **`gepa` package** — declarative LM program compilation and the GEPA optimizer (`dspy.GEPA`); FR-W.10
 - **MAPIE 1.3** (conformal prediction, FR-W.6)
 - **Langfuse Python SDK** + `langsmith[claude-agent-sdk]` (OTel auto-tracing, FR-W.7)
 - **`sse-starlette`** (Server-Sent Events streaming, FR-W.8)
@@ -524,9 +542,11 @@ Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineer
 
 ### 18.4 Assumptions
 
-- Internet connectivity available at demo venue (for weather + Anthropic API).
+- Internet connectivity available at demo venue (for weather + Gemma API). Gemma response cache for canonical demo questions is the offline fallback.
+- The MLH-issued Gemma 4 31B API key is OpenAI-compatible (the dominant pattern for Gemma-on-managed-hosting); if Google-AI-Studio-style, the DSPy adapter switches from `openai/...` to `gemini/...` (one config line, isolated to `config/agent.yaml`).
 - Coupling-matrix coefficients tunable to literature-cited Weibull params; otherwise hand-set so cascades resolve over the simulated 10-hour story.
 - HP judges value rigor + grounding over photoreal graphics.
+- MLH "Best Use of Gemma" mini-challenge values *non-trivial* uses of Gemma 4 (research-grade prompt optimization on a grounded agentic task) over chatbot wrappers — verified by ADR-022 narrative.
 
 ---
 
@@ -540,7 +560,7 @@ Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineer
 | **R-4** | GA fitness landscape ugly → boring evolution graph | Medium | Low | Tune mutation rates; pre-canned good seed; **fallback:** Bayesian opt with Optuna |
 | **R-5** | Three-scenario sim runs too slow live | High | Low | Pre-run before demo; replay at 10× speed; live mode as second demo step |
 | **R-6** | Agent hallucinates despite grounding protocol | Low | Critical | Pydantic-enforced citations; refuse-to-answer template; explicit empty-tool-result UI; pre-demo eval set with 0 % hallucination gate |
-| **R-7** | Demo venue Wi-Fi blocks API access | Medium | Critical | Cache OpenWeather data offline; mock Anthropic with locally-recorded responses for the canned demo path; live mode disabled if offline |
+| **R-7** | Demo venue Wi-Fi blocks API access | Medium | Critical | Cache OpenWeather data offline; cache canonical Gemma 4 31B responses for the canned demo path (scripted segment runs from cache, not the live API); FR-W.11 comparison numbers are pre-rendered into the slide before the demo so the Opus-via-`claude` baseline doesn't need network at demo time; live "Ask Apollo" segment disabled if offline. |
 | **R-8** | Live-Q&A breaks on a wild-card question | Medium | Medium | 10-question dry-run before demo; refusal template is *itself* a positive signal — "shows our guardrails work" |
 
 ---
@@ -549,9 +569,11 @@ Differentiator-feature work (M9, M9b–e) is mostly presentation/prompt-engineer
 
 - [ ] Which two cities for the weather scenarios? *(default: Barcelona, Phoenix)*
 - [ ] Which member owns each milestone in §17?
-- [ ] Confirm Claude Agent SDK availability; use LangGraph only as implementation fallback.
+- [ ] Confirm Claude Agent SDK availability for the loop framework; use LangGraph only as implementation fallback.
 - [ ] Demo length and ordering — does the live sim or the chat panel open the demo?
 - [ ] Final cost coefficients for the savings slide — which industrial-AM TCO study or public source to cite?
+- [ ] Confirm Gemma 4 31B API shape (OpenAI-compat vs Google AI Studio) once the MLH key is issued; default assumption is OpenAI-compat.
+- [ ] Final GEPA budget — `max_metric_calls` setting for the prompt compile run (default 150; raise to 300 if first run plateaus below the FR-W.11 within-2pp target).
 
 ---
 
@@ -596,13 +618,14 @@ Key reversals from initial brainstorm to final PRD:
 - **Survival analysis (lifelines, scikit-survival)** → rejected. Duplicative with rule-based decay + GA; needs historical failure data we don't have.
 - **PyOD anomaly detection** → rejected. Would create a second source of truth that disagrees with the simulator's ground-truth events on stage.
 - **ECharts swap from Recharts** → rejected. Recharts is sufficient at our data scale; mid-hackathon swaps are a trap.
-- **Local LLM fallback (Ollama + Qwen 2.5)** → rejected. Cannot match Sonnet-class reasoning; tether to phone hotspot if Wi-Fi dies.
+- **Local LLM fallback (Ollama + Qwen 2.5)** → rejected at the time of v1.1; Apollo's runtime LM is now Gemma 4 31B per ADR-022, so the fallback question is "what if the Gemma API is unreachable at the venue" — answer: cached canonical responses + the same offline mock harness PLAN-C §4 already builds for the demo.
 - **Full 3D printer model (React-Three-Fiber)** → rejected. No CC-licensed S100 model exists; an SVG isometric schematic with red overlays is a 1.5 h fallback if visual polish is needed.
 - **Vercel AI SDK for streaming** → rejected. Pure `sse-starlette` + raw `EventSource` avoids a React framework rewrite (FR-W.8).
 - **+ Conformal prediction (MAPIE)** → adopted as FR-W.6 — calibrated CI on every forecast turns "trust me" predictions into "8.0 h ± 2.3 h (95% CI)" with rigorous theoretical guarantees.
 - **+ Langfuse observability** → adopted as FR-W.7 — official Anthropic-blessed Claude Agent SDK integration, free tier, makes the agent reasoning literally visible during the demo.
 - **+ SSE token + tool-call streaming** → adopted as FR-W.8 — Apollo narrates while tools fire one by one, the dashboard "feels alive."
 - **+ Automated grounding eval (Ragas + DeepEval)** → adopted as FR-W.9 — turns NFR-6's "0% hallucination" from a marketing claim into a measured CI artifact.
+- **+ Gemma 4 31B + GEPA-compiled prompt as Apollo's runtime LM** → adopted as FR-W.10 / FR-W.11 (ADR-022, supersedes the model pin in ADR-008). Driven by the MLH "Best Use of Gemma" mini-challenge and Gemma 4's step change in agentic tool use (τ²-bench Retail 6.6% → 86.4% from Gemma 3 27B → Gemma 4 31B). The system prompt is compiled offline by `dspy.GEPA` (Agrawal et al., ICLR 2026 Oral) using Opus 4.7 as the reflection LM; Opus 4.7 is also the comparator on the FR-W.9 eval. Direct precedent: Databricks' gpt-oss-120b + GEPA beats Opus 4.1 by +2.2pp at 90× lower serving cost.
 
 ---
 
@@ -620,7 +643,7 @@ Mapping of HackUPC brief deliverables to PRD requirements, for evaluator traceab
 | Phase 2 runs identifiable separately | FR-2.4, FR-2.7, §14 |
 | Phase 2 time-series visualization with failure | FR-2.5, FR-2.6 |
 | Phase 3 reads from Phase 2 historian | FR-3.2 |
-| Phase 3 grounded, no hallucinations | FR-3.5, NFR-6, **FR-W.9** (automated eval) |
+| Phase 3 grounded, no hallucinations | FR-3.5, NFR-6, **FR-W.9** (automated eval), **FR-W.10** (GEPA-compiled prompt), **FR-W.11** (three-way comparison incl. Opus 4.7 baseline) |
 | Phase 3 every answer cites a data point | FR-3.3, NFR-7 |
 | Architecture slide deck | M10 |
 | Technical report | M10 |

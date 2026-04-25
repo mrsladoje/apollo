@@ -1,9 +1,9 @@
 # Plan C — Agent & UI
 
 > Owner: **Developer C** (solo slice, parallel with Plan A — Engine and Plan B — Simulation).
-> Scope: Phase 3 "Apollo" agent + the entire React frontend + observability + automated grounding eval.
-> Time budget: **15 hours**, mocks-first so Plans A and B never block Developer C.
-> Source of truth: PRD v1.1 (FR-3.x, FR-W.1/2/3/5/7/8/9, NFR-5/6/7), ADR-008/009/010/013/014/016/017/018/019/020.
+> Scope: Phase 3 "Apollo" agent + the entire React frontend + observability + automated grounding eval + **GEPA prompt compile + three-way Gemma/Opus comparison** (ADR-022, FR-W.10/W.11).
+> Time budget: **19 hours** (was 15h before ADR-022; +4h for the C12 workstream), mocks-first so Plans A and B never block Developer C.
+> Source of truth: PRD v1.1 (FR-3.x, FR-W.1/2/3/5/7/8/9/**10/11**, NFR-5/6/7), ADR-008 *(loop only — model superseded)*/009/010/013/014/016/017/018/019/020/**022**.
 
 ---
 
@@ -31,6 +31,8 @@ Plan C ships every PRD item below and is "done" only when each acceptance check 
 | **FR-W.7** | Langfuse observability via Claude Agent SDK OTel | `LANGSMITH_OTEL_ENABLED=true`; "Trace" link on every Apollo response |
 | **FR-W.8** | Streaming agent responses (SSE) | `sse-starlette` `EventSourceResponse`; native `EventSource` on client; frozen event schema |
 | **FR-W.9** | Automated grounding eval — Ragas + DeepEval | `tests/eval/grounding_set.json` (30 Q/A); `deepeval test run` exits 0 with faithfulness ≥ 0.95, hallucination = 0 |
+| **FR-W.10** | GEPA-compiled system prompt for Gemma 4 31B (ADR-022) | `scripts/agent/compile_prompt.py` runs `dspy.GEPA(student=Gemma-4-31B, reflection=Opus-4.7-via-claude-CLI, metric=DeepEval+schema+citation-resolves)` over the FR-W.9 set; commits `config/agent.system_prompt.gepa.txt` and `docs/eval/gepa_compile_log.json`; runtime agent loads the compiled prompt at startup |
+| **FR-W.11** | Three-way grounding eval comparison (ADR-022) | `scripts/agent/run_comparison.py` runs the FR-W.9 eval against {vanilla Opus 4.7, vanilla Gemma 4 31B, GEPA-Gemma}; logs to `docs/eval/comparison_results.json`; closing demo slide quotes the table; GEPA-Gemma row within 2pp of Opus-4.7 on faithfulness, hallucination = 0 on both |
 
 ### 1.2 Non-functional requirements
 
@@ -58,7 +60,8 @@ Every commitment in this plan cross-references at least one ADR.
 
 | ADR | Topic | Plan C consumes it as |
 | --- | --- | --- |
-| **ADR-008** | Claude Agent SDK + Sonnet-class model | Implementation directive for §6 (workstream C2) — pin model in `config/agent.yaml`, register five Pydantic-typed tools |
+| **ADR-008** | Claude Agent SDK *(loop framework — model partially superseded by ADR-022)* | Loop framework for §6 (workstream C2): Pydantic-typed tools, OTel hookup, refusal handling. **Runtime model is Gemma 4 31B per ADR-022, not Sonnet.** |
+| **ADR-022** | Gemma 4 31B + GEPA-compiled prompt as runtime LM | Drives the C2 model swap (§6) and the new C12 workstream (§14a) — offline `dspy.GEPA` prompt compile + three-way comparison vs vanilla Opus 4.7 + vanilla Gemma. Unlocks MLH "Best Use of Gemma". |
 | **ADR-009** | Pattern C — Agentic Diagnosis | Five-tool ceiling, visible tool calls, refuse-on-empty contract |
 | **ADR-010** | Late-interaction retrieval (LateOn-Code-edge) | **Consumer only** — wraps Plan B's `late_interaction_search` implementation |
 | **ADR-013** | Dark Twin three-scenario framing | UI copy + obituary narration in §10 (workstream C6) |
@@ -228,17 +231,18 @@ async def event_stream(events: AsyncIterator[dict]) -> EventSourceResponse:
 
 ---
 
-## 6. Workstream C2 — Agent loop (Claude Agent SDK + Sonnet)
+## 6. Workstream C2 — Agent loop (Claude Agent SDK + Gemma 4 31B)
 
-**Owner:** Dev C. **Hours:** 6–8 (after mocks + SSE skeleton land). **Depends on:** C1, C3 schemas. **ADRs:** 008, 009.
+**Owner:** Dev C. **Hours:** 6–8 (after mocks + SSE skeleton land). **Depends on:** C1, C3 schemas. **ADRs:** 008 *(loop framework only)*, 009, **022 *(model)***.
 
 ### 6.1 Deliverables
 
-- `config/agent.yaml` — pins final Sonnet-class model id at start of build window (e.g. `claude-sonnet-4-7`); also surfaced in README and Langfuse metadata per ADR-008
-- `src/apollo/agent/loop.py` — Claude Agent SDK loop with five tools registered as Pydantic schemas
+- `config/agent.yaml` — pins **Gemma 4 31B Dense** as runtime LM (`provider: openai`, `model: google/gemma-4-31B-it`, `api_base` from MLH-issued key); also surfaced in README and Langfuse metadata per ADR-022. *Sonnet-class model id is no longer pinned here — see ADR-022 supersession of ADR-008's model choice.*
+- `src/apollo/agent/loop.py` — Claude Agent SDK loop with five tools registered as Pydantic schemas, wired to the Gemma endpoint via DSPy's `dspy.LM("openai/google/gemma-4-31B-it", api_base=..., api_key=...)`
 - `src/apollo/agent/tools/` — five tool wrappers that adapt `sim.contracts` callables to SDK schemas
-- `src/apollo/agent/prompts/system.md` — system prompt enforcing grounding rules (§6.3 below)
+- `src/apollo/agent/prompts/system.md` — *seed* system prompt with grounding rules (§6.3 below). **This is the input to the GEPA compile (workstream C12); the runtime agent loads `config/agent.system_prompt.gepa.txt` instead, falling back to this seed only if the compiled artifact is missing.**
 - `tests/agent/test_tool_registration.py` — asserts all five tools registered, schemas valid
+- `tests/agent/test_runtime_lm_is_gemma.py` — asserts `config/agent.yaml`'s model id starts with `google/gemma-4-31B` (CI guard against accidental revert to Sonnet)
 
 ### 6.2 The five tools
 
@@ -278,7 +282,8 @@ Persona (ADR-019): see PERSONA.md  [< 200 tokens, loaded separately]
 
 - [ ] `pytest tests/agent/test_tool_registration.py` green: 5 tools, all schemas typed
 - [ ] `pytest tests/agent/test_grounding.py::test_canonical_barcelona` asserts ≥1 tool call before final text
-- [ ] `config/agent.yaml` model id surfaces in Langfuse trace metadata
+- [ ] `pytest tests/agent/test_runtime_lm_is_gemma.py` green (model id starts with `google/gemma-4-31B`)
+- [ ] `config/agent.yaml` model id surfaces in Langfuse trace metadata as `google/gemma-4-31B-it`
 
 ---
 
@@ -642,6 +647,117 @@ exit 0  ⇒  CI gate, README badge, demo slide quotes the number
 
 ---
 
+## 14a. Workstream C12 — GEPA prompt compile + three-way comparison (FR-W.10, FR-W.11)
+
+**Owner:** Dev C. **Hours:** 13–17 (after eval set is frozen in C10; runs while C11 dry-run prep happens in parallel — GEPA compile is offline so it can chew on the eval set in the background). **Depends on:** C2 (Gemma agent wired), C3 (citation pipeline), C10 (frozen `tests/eval/grounding_set.json`). **ADR:** 022.
+
+### 14a.1 Why this is its own workstream, not part of C2
+
+C2 wires the agent loop to Gemma 4 31B with a hand-written *seed* system prompt. That seed is acceptable enough to pass smoke tests but is not the prompt that ships. The **runtime prompt is compiled by `dspy.GEPA` against the FR-W.9 eval set**. Per ADR-022 the compile is offline, scripted, and produces a frozen artifact (`config/agent.system_prompt.gepa.txt`) the agent loads at startup. This is the MLH "Best Use of Gemma" deliverable and the differentiation thesis of the demo.
+
+### 14a.2 Deliverables
+
+- `scripts/agent/compile_prompt.py` — runs `dspy.GEPA` end-to-end:
+  - Student LM: `dspy.LM("openai/google/gemma-4-31B-it", api_base=…, api_key=…)`
+  - Reflection LM: a thin DSPy `LM` adapter that shells out to the local `claude` CLI (Bash) for Claude Opus 4.7 reflections — no separate API key needed beyond the existing `claude` setup
+  - Metric: `metric_with_feedback` combining DeepEval `FaithfulnessMetric` (already in C10) + `HallucinationMetric` + three programmatic signals (schema valid, correct tool selected, all citations resolve via §7.2's `resolve_citation`); the textual feedback string is verbose and diagnostic — that's the optimization channel (per Decagon production notes)
+  - Trainset: 20 of the 30 frozen FR-W.9 Q/A triples; valset: 10. Held-out test set lives in C10's existing pipeline so the gate that ships the prompt is independent of the gate that compiled it.
+  - Budget: `max_metric_calls=150` (raise to 300 if first run plateaus — see §20 PRD open question)
+- `config/agent.system_prompt.gepa.txt` — committed compiled prompt artifact; loaded by `src/apollo/agent/loop.py` at startup (falls back to `prompts/system.md` seed if missing)
+- `docs/eval/gepa_compile_log.json` — committed structured optimization log: per-iteration scores, parent-candidate genealogy, total tokens consumed, wall-clock time
+- `scripts/agent/run_comparison.py` — runs the FR-W.9 DeepEval pipeline against three configurations, logs to `docs/eval/comparison_results.json`:
+  1. **Vanilla Opus 4.7** — Apollo loop with `claude` CLI as runtime LM, seed `prompts/system.md`
+  2. **Vanilla Gemma 4 31B** — Apollo loop on Gemma, seed `prompts/system.md`
+  3. **GEPA-Gemma** — Apollo loop on Gemma, compiled `config/agent.system_prompt.gepa.txt`
+- `docs/slides/comparison.md` — closing demo slide table generated from `comparison_results.json`; speaker notes explain the GEPA paradigm in two sentences with the Databricks gpt-oss-120b precedent cited
+
+### 14a.3 Two-LM architecture (HF DSPy GEPA cookbook pattern)
+
+```python
+# scripts/agent/compile_prompt.py (sketch)
+import dspy, json
+from dspy.teleprompt.gepa import GEPA
+from src.apollo.agent.loop import build_apollo_signature, METRIC_WITH_FEEDBACK
+
+student = dspy.LM(
+    "openai/google/gemma-4-31B-it",
+    api_base=os.environ["GEMMA_API_BASE"],
+    api_key=os.environ["GEMMA_API_KEY"],
+    model_type="chat",
+)
+reflector = dspy.LM("claude_cli/opus-4-7")  # adapter shells to `claude --print …`
+dspy.configure(lm=student)
+
+trainset, valset = load_split("tests/eval/grounding_set.json", n_train=20, n_val=10)
+
+apollo = build_apollo_signature()  # dspy.ReAct over the 5 tools
+optimized = GEPA(
+    metric=METRIC_WITH_FEEDBACK,
+    reflection_lm=reflector,
+    max_metric_calls=150,
+    track_stats=True,
+).compile(student=apollo, trainset=trainset, valset=valset)
+
+# persist the compiled prompt + log
+optimized.save("config/agent.system_prompt.gepa.txt")
+json.dump(optimized.compile_stats, open("docs/eval/gepa_compile_log.json", "w"))
+```
+
+The `claude_cli` provider is a small DSPy `LM` subclass — ~30 lines wrapping `subprocess.run(["claude", "--print", "--model", "opus-4-7", prompt])`. Lives in `src/apollo/agent/lm/claude_cli.py`.
+
+### 14a.4 Metric with feedback (the load-bearing piece)
+
+Per the Decagon production GEPA tuning notes, **80% of the gain comes from the textual feedback string in the metric**, not from the metric's scalar score. So the metric returns *both*:
+
+```python
+# src/apollo/agent/metric.py (sketch)
+def METRIC_WITH_FEEDBACK(example, pred, trace=None) -> dspy.Prediction:
+    score, feedback = 0.0, []
+
+    # 1. Schema validity on every tool call
+    for tc in pred.tool_calls:
+        ok, err = validate_tool_args(tc)
+        if not ok: feedback.append(f"INVALID TOOL ARGS for {tc.tool}: {err}")
+    if all(validate_tool_args(tc)[0] for tc in pred.tool_calls): score += 0.2
+
+    # 2. Citation resolves against the historian (the §7 ACL invariant)
+    unresolved = [c for c in pred.citations if not resolve_citation(c, db)]
+    if unresolved: feedback.append(f"FABRICATED CITATIONS: {unresolved} — these triples don't exist in the historian.")
+    elif pred.severity != "REFUSAL": score += 0.3
+
+    # 3. Refused when no telemetry exists (FR-3.5)
+    if example.is_unanswerable and pred.severity != "REFUSAL":
+        feedback.append("MUST REFUSE: no telemetry supports this question; do not guess.")
+    elif example.is_unanswerable: score += 0.2
+
+    # 4. DeepEval faithfulness on the prose
+    faith = DeepEvalFaithfulness().score(pred.text, contexts=example.contexts)
+    score += 0.3 * faith
+    if faith < 0.95: feedback.append(f"LOW FAITHFULNESS ({faith:.2f}): claim {worst_claim(pred)} not supported by retrieved context.")
+
+    return dspy.Prediction(score=score, feedback="\n".join(feedback) or "OK")
+```
+
+### 14a.5 Acceptance
+
+- [ ] `python scripts/agent/compile_prompt.py` runs end-to-end in < 4 hours, producing a non-empty `config/agent.system_prompt.gepa.txt` and `docs/eval/gepa_compile_log.json`
+- [ ] Compiled prompt token count < 800 (GEPA produces shorter prompts than MIPROv2, per Agrawal et al. — guard against bloat)
+- [ ] Persona regression check (ADR-019, §8.2) still passes against the compiled prompt — if the compiled prompt drops faithfulness vs persona-stripped, ship the higher-faithfulness variant
+- [ ] `python scripts/agent/run_comparison.py` produces `docs/eval/comparison_results.json` with three rows; GEPA-Gemma row's faithfulness within 2pp of Opus-4.7 row, hallucination = 0 on both
+- [ ] `tests/agent/test_compiled_prompt_loads.py` — agent startup loads `config/agent.system_prompt.gepa.txt` (not the seed) when the compiled file exists
+- [ ] Closing demo slide (`docs/slides/comparison.md`) renders the three-row comparison table; speaker notes cite Agrawal et al. arXiv:2507.19457 and the Databricks gpt-oss-120b precedent
+
+### 14a.6 Risks specific to C12
+
+| Risk | Mitigation |
+| --- | --- |
+| GEPA-Gemma underperforms vanilla Gemma (over-fits the trainset) | Hold-out test gate in C10 is independent; if compiled prompt loses on held-out, raise `max_metric_calls` and re-compile, or fall back to seed prompt with a feature flag |
+| GEPA-Gemma comes within 5pp but not 2pp of Opus 4.7 | Acceptable — pitch becomes "open model approaches frontier" instead of "matches frontier"; still wins MLH "Best Use of Gemma" |
+| `claude` CLI rate-limits during compile | GEPA only calls reflection LM ~10-15 times; rate is not a real constraint at 150 metric calls |
+| Compiled prompt leaks model-specific quirks | Keep the seed prompt readable + the compiled prompt in git so any judge can diff them; transparency is a feature |
+
+---
+
 ## 15. Workstream C11 — Live "Ask Apollo" 10-question dry-run (FR-W.5)
 
 **Owner:** Dev C. **Hours:** 14–15. **ADR:** 014, 019.
@@ -686,13 +802,15 @@ exit 0  ⇒  CI gate, README badge, demo slide quotes the number
 | **Latency** | `tests/agent/test_latency.py` | Canonical query p95 < 6 s (NFR-5) |
 | **UI components** | `tests/ui/` (Vitest) | Reducer correctness, citation click scrolls within 100 ms, severity badge color, REFUSAL bubble layout |
 | **Eval** | `tests/eval/test_grounding.py` | Ragas + DeepEval gates pass |
+| **GEPA artifact** | `tests/agent/test_compiled_prompt_loads.py` | Agent loads `config/agent.system_prompt.gepa.txt` at startup; runtime LM is Gemma; compiled prompt < 800 tokens (FR-W.10) |
+| **Three-way comparison** | `scripts/agent/run_comparison.py --check` | `docs/eval/comparison_results.json` exists with three rows; GEPA-Gemma faithfulness within 2pp of Opus-4.7 (FR-W.11) |
 | **Smoke (mock)** | `scripts/smoke-mock.sh` | Mock backend → chat → render — runs in < 30 s, no internet required |
 
 CI gate (a single command before commit): `make ci` runs `pytest`, `npm run test:ui`, `deepeval test run tests/eval/`.
 
 ---
 
-## 17. Hour-by-hour schedule (15 hours)
+## 17. Hour-by-hour schedule (19 hours, +4h vs. pre-ADR-022)
 
 | Hour | Milestone | Visible artifact |
 | --- | --- | --- |
@@ -701,15 +819,19 @@ CI gate (a single command before commit): `make ci` runs `pytest`, `npm run test
 | **2–4** | C3 Pydantic `ApolloResponse` + citation resolution + refusal template + adversarial tests | `pytest tests/agent/test_citations.py` green |
 | **4–5** | C7 chat panel React skeleton against `agent_mock` | Streaming text + tool-call cards visible in browser |
 | **5–6** | C6 live simulation panel (3 universes, conformal bands) against `forecasts_mock` | Three panels render side-by-side; bands shaded |
-| **6–8** | C2 real Claude Agent SDK loop wired up; `config/agent.yaml` model id pinned | `pytest tests/agent` green; `agent_mock` swapped out behind feature flag |
+| **6–8** | C2 real Claude Agent SDK loop wired to **Gemma 4 31B** via DSPy `dspy.LM` adapter; `config/agent.yaml` pins `google/gemma-4-31B-it`; seed `prompts/system.md` in place | `pytest tests/agent` green incl. `test_runtime_lm_is_gemma`; `agent_mock` swapped out behind feature flag |
 | **8–10** | C4 persona prompt (< 200 tokens) + 6 speak() generators + C5 Langfuse OTel hookup | "Trace" link works; persona token guard passes |
 | **10–11** | C8 What-If panel | Dual-trace overlay + delta number rendered |
 | **11–12** | Integration with Plan B's real historian + `late_interaction_search` index | Mocks behind feature flag; integration tests green |
-| **12–13** | C9 savings slide + C10 eval pipeline (`tests/eval/grounding_set.json` frozen) | DeepEval green: faithfulness ≥ 0.95, hallucination = 0 |
+| **12–13** | C9 savings slide + C10 eval pipeline (`tests/eval/grounding_set.json` frozen — this is the GEPA target) | DeepEval green: faithfulness ≥ 0.95, hallucination = 0 on seed prompt |
 | **13–14** | Integration with Plan A's real `Forecast` payloads (MAPIE) | Conformal bands now driven by live data |
-| **14–15** | C11 wildcard dry-run + final polish + Langfuse offline fallback drill | 10/10 wildcards pass; `make langfuse-local` works |
+| **14–17** | **C12 GEPA prompt compile (offline, ~3h wall-clock)** + `claude_cli` reflection adapter + comparison harness | `config/agent.system_prompt.gepa.txt` committed; `docs/eval/gepa_compile_log.json` shows monotonic score improvement; `docs/eval/comparison_results.json` rendered to `docs/slides/comparison.md` |
+| **17–18** | C11 wildcard dry-run against the **GEPA-compiled** Apollo + Langfuse offline fallback drill | 10/10 wildcards pass on GEPA-Gemma; `make langfuse-local` works |
+| **18–19** | Final polish + slide deck + decompile-vs-seed prompt diff for the demo "we evolved this" beat | Demo deck includes both the seed and compiled prompts side-by-side |
 
 **Anti-blocking guarantee.** At every hour boundary, `make demo-mock` boots the full dashboard against zero external deps. If Plans A or B slip, Plan C ships against mocks and the demo still runs.
+
+**C12-specific anti-blocking.** If the GEPA compile crashes or underperforms the seed prompt on the held-out gate, `config/agent.yaml` flips one flag (`AGENT_SYSTEM_PROMPT=seed|gepa`) and Apollo runs on the seed. The comparison harness then logs only two rows (vanilla Opus, vanilla Gemma); the MLH narrative degrades to "we tried GEPA and the seed prompt was already strong" — still defensible, still uses Gemma.
 
 ---
 
@@ -718,7 +840,9 @@ CI gate (a single command before commit): `make ci` runs `pytest`, `npm run test
 | ID | Risk | Plan C mitigation |
 | --- | --- | --- |
 | **R-6** | Agent hallucinates despite system prompt | Three-layer Pydantic enforcement (§7); `tests/agent/test_citations.py` adversarial suite; DeepEval gate (§14) — fabricated citations are *structurally impossible* to ship |
-| **R-7** | Demo venue Wi-Fi blocks Anthropic / Langfuse | `agent_mock` + canned SSE traces for the scripted demo path (NFR-9 sequence — live mode is the second segment); self-hosted Langfuse Docker pre-pulled (§9.3); LangGraph fallback documented per ADR-008 (not built unless Sonnet path collapses) |
+| **R-7** | Demo venue Wi-Fi blocks Gemma API / Langfuse | `agent_mock` + canned SSE traces for the scripted demo path (NFR-9 sequence — live mode is the second segment); self-hosted Langfuse Docker pre-pulled (§9.3); cached canonical Gemma responses for the demo questions; LangGraph fallback documented per ADR-008 (not built unless the Gemma path collapses) |
+| **R-9 (ADR-022)** | GEPA-compiled prompt regresses vs. seed prompt on held-out gate | C12 §14a.6 — feature flag `AGENT_SYSTEM_PROMPT=seed\|gepa` swaps in one line; comparison harness still runs and produces a defensible "GEPA didn't help on this task, here's the data" demo beat |
+| **R-10 (ADR-022)** | Gemma 4 31B underperforms even with GEPA-compiled prompt vs Opus 4.7 baseline | If GEPA-Gemma is more than 5pp below Opus on faithfulness, the slide pivots from "matches" to "approaches at 75× lower cost" — still a strong MLH narrative; or feature-flag back to Opus 4.7 via the same `AGENT_RUNTIME_LM` flag the demo deck describes |
 | **R-8** | Live "Ask Apollo" wild-card breaks | Refusal template (§7.3) is itself a positive demo signal per ADR-014. 10-question dry-run (§15) before stage. |
 | **C-internal-1** | SSE event order regression slips a test | Golden-trace replay test (`tests/sse/test_event_replay.py`) asserts exact order |
 | **C-internal-2** | Persona prompt regresses faithfulness | ADR-019 yield rule — if FR-W.9 score drops, persona prompt is stripped and we ship the higher-faithfulness variant |
@@ -769,6 +893,15 @@ pytest tests/agent/test_langfuse_trace.py -q
 # FR-W.9 — automated grounding eval gate
 deepeval test run tests/eval/
 
+# FR-W.10 — GEPA-compiled prompt is a frozen artifact, agent loads it at startup
+test -f config/agent.system_prompt.gepa.txt
+test -f docs/eval/gepa_compile_log.json
+pytest tests/agent/test_compiled_prompt_loads.py -q
+pytest tests/agent/test_runtime_lm_is_gemma.py -q
+
+# FR-W.11 — three-way comparison results committed and within target
+python scripts/agent/run_comparison.py --check  # exits 0 iff GEPA-Gemma row within 2pp of Opus-4.7
+
 # NFR-5 — agent latency
 pytest tests/agent/test_latency.py -q
 
@@ -791,7 +924,10 @@ The binding source for the bounded-context structure of Plan C's work is [`ADR-0
 - **Name:** Agent & Presentation.
 - **Directory:** `src/agent/` (Python backend) + `frontend/` (React UI).
 - **Responsibility:** The Voice. Claude Agent SDK loop with five typed tool wrappers, the three-layer Pydantic citation pipeline (ADR-014), the structured refusal template, the SSE wire format (ADR-017), Langfuse OTel observability (ADR-016), the Apollo first-person persona (ADR-019), the React frontend's three Universe panels + Apollo chat panel + What-If panel, and the Ragas + DeepEval automated grounding eval (ADR-018).
-- **Local ubiquitous language (per ADR-021):** Tool Call, Citation, Refusal, Severity, Trace, Persona. Plan C does not introduce vocabulary outside this list; Component / Run / Counterfactual / Obituary are imported from upstream contexts' published languages.
+- **Local ubiquitous language (per ADR-021, extended by ADR-022):** Tool Call, Citation, Refusal, Severity, Trace, Persona, **Compiled Prompt**, **Reflection LM**, **Comparison Run**. Plan C does not introduce vocabulary outside this list; Component / Run / Counterfactual / Obituary are imported from upstream contexts' published languages.
+  - **Compiled Prompt:** the system-prompt artifact produced by `dspy.GEPA` (FR-W.10), committed as `config/agent.system_prompt.gepa.txt`. Distinct from the *seed prompt* (`prompts/system.md`) which is the GEPA input.
+  - **Reflection LM:** the LM used by GEPA during the reflection step to propose new candidate prompts — Claude Opus 4.7 via the local `claude` CLI (ADR-022). Distinct from the *student LM* (Gemma 4 31B) which is the LM the prompt is being optimized for.
+  - **Comparison Run:** one of three eval invocations under FR-W.11 — vanilla Opus 4.7, vanilla Gemma 4 31B, GEPA-Gemma. Logged to `docs/eval/comparison_results.json`.
 - **Published language:** `src/agent/contracts.py` (`ApolloResponse`, `Citation`, `ToolCall`) and `frontend/src/types.ts` (`SSEEvent` union) — the Open Host Service consumed by the React frontend, the eval CI, and any future integration. See §3.2, §3.3.
 
 ### 20.3 Aggregate roots

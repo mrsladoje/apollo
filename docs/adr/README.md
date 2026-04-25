@@ -26,7 +26,7 @@ All ADRs in this directory are **Status: Accepted** as of 2026-04-25. If a decis
 | ID | Title | One-line summary |
 | --- | --- | --- |
 | [ADR-007](ADR-007-sqlite-historian.md) | SQLite historian | File-based, queryable, demo-friendly; no server to babysit |
-| [ADR-008](ADR-008-claude-agent-sdk-and-sonnet.md) | Claude Agent SDK + Sonnet-class | Mature tool-use, structured output, locked at impl time on API availability |
+| [ADR-008](ADR-008-claude-agent-sdk-and-sonnet.md) | Claude Agent SDK + Sonnet-class *(model partially superseded by ADR-022)* | Loop framework: Claude Agent SDK + Pydantic-typed tools + Langfuse OTel. Runtime model is now Gemma 4 31B per ADR-022; this ADR retains the SDK/loop rationale. |
 | [ADR-009](ADR-009-pattern-c-agentic-diagnosis.md) | Pattern C — Agentic Diagnosis | Highest tier in the brief; 5 typed tools with visible UI tool-call traces |
 | [ADR-010](ADR-010-late-interaction-retrieval-lateon-code-edge.md) | Late-interaction retrieval | LightOn LateOn-Code-edge (17M, Apache 2.0) over dense embeddings |
 | [ADR-011](ADR-011-genetic-algorithm-for-maintenance.md) | GA (DEAP) for maintenance scheduling | Visible fitness curve in demo; avoids RL training instability |
@@ -55,6 +55,7 @@ All ADRs in this directory are **Status: Accepted** as of 2026-04-25. If a decis
 | ID | Title | One-line summary |
 | --- | --- | --- |
 | [ADR-021](ADR-021-domain-driven-design-module-structure.md) | DDD module structure with three bounded contexts | Three bounded contexts (Engine / Simulation & History / Agent & Presentation) with shared kernel limited to `ComponentId`; citation validator is the ACL |
+| [ADR-022](ADR-022-gemma-4-31b-and-gepa-optimized-prompt.md) | Gemma 4 31B + GEPA-optimized prompt as Apollo's runtime LM | Supersedes ADR-008's *model* (SDK/loop unchanged): Apollo runs on Gemma 4 31B with a system prompt compiled by `dspy.GEPA` (Agrawal et al., ICLR 2026 Oral); Opus 4.7 is the offline reflection LM and the comparator on the FR-W.9 grounding eval — unlocks MLH "Best Use of Gemma" |
 
 ---
 
