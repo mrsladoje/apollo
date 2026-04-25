@@ -7,7 +7,23 @@ COV_TARGET ?= sim
 COV_FAIL_UNDER ?= 85
 
 .PHONY: test test-engine test-plan-b regen-golden train-pinn \
-        cache-drivers train-ga build-grid build-index plan_b_demo
+        cache-drivers train-ga build-grid build-index plan_b_demo \
+        demo-mock backend frontend install
+
+install:
+	pip install -e ".[dev]"
+	cd frontend && npm install
+
+backend:
+	PYTHONPATH=src uvicorn apollo.api.app:app --reload --port 8000
+
+frontend:
+	cd frontend && npm run dev
+
+demo-mock:
+	@echo "Starting Apollo mock demo..."
+	@PYTHONPATH=src uvicorn apollo.api.app:app --reload --port 8000 &
+	@cd frontend && npm run dev
 
 # Default test target — engine only, fast.
 test:
