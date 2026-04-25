@@ -18,6 +18,9 @@ dev = [
     "pytest-benchmark>=4.0",
 ]
 
+[project.scripts]
+pytest = "apollo_pytest_shim:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -25,6 +28,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools]
+py-modules = ["apollo_pytest_shim"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "slow: PLAN-A §10.4 long-running tests (e.g. conformal coverage gate)",
+]

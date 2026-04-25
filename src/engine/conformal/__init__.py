@@ -1,8 +1,13 @@
 """MAPIE conformal layer — PLAN-A §9 / FR-W.6 / ADR-015."""
 
+from engine.conformal.residuals import calibrate_all
 from engine.conformal.wrapper import (
     ConformalForecaster,
     forecast_all_components,
 )
 
-__all__ = ["ConformalForecaster", "forecast_all_components"]
+__all__ = [
+    "ConformalForecaster",
+    "forecast_all_components",
+    "calibrate_all",
+]
