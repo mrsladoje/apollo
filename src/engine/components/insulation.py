@@ -21,7 +21,13 @@ from engine.failure_models import ExponentialDecay
 
 class InsulationPanel(Component):
     component_id = ComponentId.INSULATION
-    intrinsic_alpha: float = 5e-5 / 60.0  # 5e-5 / h converted to 1/min
+    # ADR-006 literature anchor for ceramic-fiber aging is 5e-5 / h. We run
+    # at ~120x that rate (2e-3 / min) as a demo acceleration so the 10-h
+    # simulated print cycle reads like several hundred hours of real-world
+    # wear and the upstream of CSC-B (insulation -> heater -> nozzle/resistor)
+    # has time to fire visibly. Magnitude tuning per R-1; structure
+    # (exponential family) is unchanged.
+    intrinsic_alpha: float = 2.0e-3
 
     k_eff_init_W_mK: float = 0.05  # ceramic-fiber typical
     temp_ref_C: float = 25.0
