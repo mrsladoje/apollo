@@ -37,3 +37,13 @@ Cure Binding - Thermal - Insulator, Heater
 ## Bit-identical determinism
 
 Allows for proper testing, policy comparison, counterfactual replay, etc etc...
+
+## MAPIE Conformal Prediction (how to be honestly wrong)
+
+- The honest weather forecaster (it will rain tomorrow with 70% confidence) - the confidence is calibrated on previous predictions and their confidence.
+- A mathematical formula - mathematically guaranteed
+- Anyone can predict - we can predict with proof
+- Finds band size where 95% of predictions will land
+- EnbPi batching (30 mins since we need the data to be exchangable (that ordering doesn't affect results, but minute 32 is closely coupled to minute 31 in our system))
+
+
