@@ -9,35 +9,47 @@ class HistorianWriter:
     def __init__(self, db_path: str = "historian.db", batch_size: int = 1000):
         self.conn = connect(db_path)
         self.batch_size = batch_size
-        self._buffer = []
+        self._pending_rows = 0
+
+    def _execute(self, sql: str, params=(), rows: int = 1):
+        self.conn.execute(sql, params)
+        self._pending_rows += rows
+        if self._pending_rows >= self.batch_size:
+            self.flush()
+
+    def flush(self):
+        if self._pending_rows:
+            self.conn.commit()
+            self._pending_rows = 0
         
     def log_run(self, run_id: str, scenario: str, policy: str, seed: int, config: dict):
         # ADR-012 / PLAN-B §7.2: roll forward logic
         # Delete prior rows for this run_id to ensure a clean, deterministic re-run
-        self.conn.execute("DELETE FROM checkpoints WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM forecasts WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM obituaries WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM maintenance_events WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM component_states WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM drivers WHERE run_id = ?", (run_id,))
-        self.conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
-        
-        self.conn.execute(
-            "INSERT INTO runs (run_id, scenario_name, policy, started_at, seed, config_json) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                run_id,
-                scenario,
-                policy,
-                self._started_at(config).isoformat(),
-                seed,
-                json.dumps(config, sort_keys=True, default=str),
+        self.flush()
+        with self.conn:
+            self.conn.execute("DELETE FROM checkpoints WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM forecasts WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM obituaries WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM maintenance_events WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM component_states WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM drivers WHERE run_id = ?", (run_id,))
+            self.conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+
+            self.conn.execute(
+                "INSERT INTO runs (run_id, scenario_name, policy, started_at, seed, config_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    scenario,
+                    policy,
+                    self._started_at(config).isoformat(),
+                    seed,
+                    json.dumps(config, sort_keys=True, default=str),
+                )
             )
-        )
-        self.conn.commit()
 
     def log_step(self, run_id: str, t: datetime, state: EngineState, drivers: Drivers):
         # Log drivers
-        self.conn.execute(
+        self._execute(
             """INSERT INTO drivers 
                (run_id, t, temp_C, humidity, pm25, psd_d50, voltage_stability, operator_shift) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -49,7 +61,7 @@ class HistorianWriter:
         
         # Log component states
         for cid, cstate in state.components.items():
-            self.conn.execute(
+            self._execute(
                 """INSERT INTO component_states 
                    (run_id, t, component_id, health, status, metrics_json) 
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -58,12 +70,9 @@ class HistorianWriter:
                     cstate.status.value, json.dumps(cstate.metrics)
                 )
             )
-        
-        self.conn.commit() # Simple commit for now, could batch if needed for perf
-
     def log_forecasts(self, run_id: str, t: datetime, forecasts: list[Forecast]):
         for forecast in forecasts:
-            self.conn.execute(
+            self._execute(
                 """INSERT OR REPLACE INTO forecasts
                    (run_id, t, component_id, horizon_min, point, lower, upper, ci_level)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -78,21 +87,18 @@ class HistorianWriter:
                     forecast.ci_level,
                 ),
             )
-        self.conn.commit()
 
     def log_event(self, run_id: str, t: datetime, component_id: ComponentId, action: str, triggered_by: str):
-        self.conn.execute(
+        self._execute(
             "INSERT INTO maintenance_events (run_id, t, component_id, action, triggered_by) VALUES (?, ?, ?, ?, ?)",
             (run_id, t.isoformat(), component_id.value, action, triggered_by)
         )
-        self.conn.commit()
 
     def log_obituary(self, obit_data: dict):
-        self.conn.execute(
+        self._execute(
             "INSERT INTO obituaries (run_id, component_id, failure_t, narrative, citations_json) VALUES (?, ?, ?, ?, ?)",
             (obit_data["run_id"], obit_data["component_id"], obit_data["failure_t"], obit_data["narrative"], obit_data["citations_json"])
         )
-        self.conn.commit()
 
     def has_obituary(self, run_id: str, component_id: ComponentId) -> bool:
         res = self.conn.execute(
@@ -102,6 +108,7 @@ class HistorianWriter:
         return res is not None
 
     def finalize_run(self, run_id: str):
+        self.flush()
         row = self.conn.execute(
             "SELECT config_json FROM runs WHERE run_id = ?",
             (run_id,),
@@ -116,13 +123,13 @@ class HistorianWriter:
     def log_checkpoint(self, run_id: str, t: datetime, state: EngineState):
         import pickle
         state_blob = pickle.dumps(state)
-        self.conn.execute(
+        self._execute(
             "INSERT INTO checkpoints (run_id, t, state_blob) VALUES (?, ?, ?)",
             (run_id, t.isoformat(), state_blob)
         )
-        self.conn.commit()
 
     def close(self):
+        self.flush()
         self.conn.close()
 
     @staticmethod

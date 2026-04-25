@@ -13,7 +13,8 @@ def test_contract_functions_are_callable():
     assert callable(late_interaction_search)
 
 
-def test_mock_search_is_available_through_frozen_contract():
+def test_mock_search_is_available_through_frozen_contract(monkeypatch):
+    monkeypatch.setenv("RETRIEVAL_BACKEND", "mock")
     rows = late_interaction_search("thermal cascade", top_k=2)
     assert rows
     assert rows[0].score > 0

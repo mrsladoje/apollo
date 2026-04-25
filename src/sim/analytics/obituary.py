@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
@@ -105,17 +106,114 @@ def attribute_cause(
             }
         )
 
-    suspects.append(
-        {
+    suspects.append(_driver_cause(failed_id, failure_t, run_id, db_path, lookback))
+
+    return max(suspects, key=lambda s: s["score"])
+
+
+def _query_drivers(
+    run_id: str,
+    start_t: datetime,
+    end_t: datetime,
+    db_path: str,
+) -> List[sqlite3.Row]:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        return conn.execute(
+            """SELECT *
+               FROM drivers
+               WHERE run_id = ? AND t >= ? AND t <= ?
+               ORDER BY t ASC""",
+            (run_id, start_t.isoformat(), end_t.isoformat()),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _driver_cause(
+    failed_id: ComponentId,
+    failure_t: datetime,
+    run_id: str,
+    db_path: str,
+    lookback: timedelta,
+) -> Dict[str, Any]:
+    """Score driver stress from the same 30-minute window as coupling causes."""
+    rows = _query_drivers(run_id, failure_t - lookback, failure_t, db_path)
+    if not rows:
+        return {
             "type": "driver",
             "id": "operational_wear",
-            "score": 0.1,
+            "score": 0.0,
             "phrase": "standard operational duty cycle",
             "peak_t": failure_t,
         }
-    )
 
-    return max(suspects, key=lambda s: s["score"])
+    def candidate(row, driver_id: str, raw_score: float, phrase: str):
+        return {
+            "type": "driver",
+            "id": driver_id,
+            "score": max(0.0, raw_score),
+            "phrase": phrase,
+            "peak_t": datetime.fromisoformat(row["t"]),
+        }
+
+    scored: List[Dict[str, Any]] = []
+    for row in rows:
+        if failed_id in (ComponentId.NOZZLE, ComponentId.INSULATION):
+            scored.append(
+                candidate(
+                    row,
+                    "humidity",
+                    (float(row["humidity"]) - 0.65) * 0.7,
+                    "elevated humidity in the driver vector",
+                )
+            )
+        if failed_id in (ComponentId.NOZZLE, ComponentId.BLADE):
+            scored.append(
+                candidate(
+                    row,
+                    "pm25",
+                    (float(row["pm25"]) - 25.0) / 250.0,
+                    "particulate loading in the driver vector",
+                )
+            )
+            scored.append(
+                candidate(
+                    row,
+                    "psd_d50",
+                    (float(row["psd_d50"]) - 20.0) / 20.0,
+                    "powder particle-size drift in the driver vector",
+                )
+            )
+        if failed_id in (ComponentId.HEATER, ComponentId.RESISTOR):
+            scored.append(
+                candidate(
+                    row,
+                    "temp_C",
+                    (float(row["temp_C"]) - 30.0) / 100.0,
+                    "thermal load in the driver vector",
+                )
+            )
+        if failed_id in (ComponentId.MOTOR, ComponentId.RESISTOR):
+            scored.append(
+                candidate(
+                    row,
+                    "voltage_stability",
+                    (0.95 - float(row["voltage_stability"])) * 2.0,
+                    "voltage instability in the driver vector",
+                )
+            )
+
+    if not scored:
+        return {
+            "type": "driver",
+            "id": "operational_wear",
+            "score": 0.0,
+            "phrase": "standard operational duty cycle",
+            "peak_t": failure_t,
+        }
+    return max(scored, key=lambda s: s["score"])
 
 
 def _cascade_sentence(failed_id: ComponentId, cause: Dict[str, Any]) -> str:
@@ -234,6 +332,14 @@ def generate_obituary(
             {
                 "run_id": run_id,
                 "component": cause["id"].value,
+                "t": cause["peak_t"].isoformat(),
+            }
+        )
+    else:
+        citations.append(
+            {
+                "run_id": run_id,
+                "driver": cause["id"],
                 "t": cause["peak_t"].isoformat(),
             }
         )

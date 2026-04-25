@@ -1,4 +1,4 @@
-PY ?= python3
+PY ?= python3.11
 PYTHONPATH := src
 
 HISTORIAN ?= historian.db
@@ -7,7 +7,7 @@ COV_TARGET ?= sim
 COV_FAIL_UNDER ?= 85
 
 .PHONY: test test-engine test-plan-b regen-golden train-pinn \
-        cache-drivers build-grid build-index plan_b_demo
+        cache-drivers train-ga build-grid build-index plan_b_demo
 
 # Default test target — engine only, fast.
 test:
@@ -32,6 +32,10 @@ train-pinn:
 cache-drivers:
 	PYTHONPATH=$(PYTHONPATH) $(PY) -m sim.drivers.cache_all
 
+# §9 — tune AI policy and emit data/ga_fitness.csv + config/policies.yaml.
+train-ga:
+	PYTHONPATH=$(PYTHONPATH) $(PY) -m sim.optimizer.ga
+
 # FR-2.4 / §8.3 — builds all 9 grid runs into HISTORIAN.
 build-grid: cache-drivers
 	PYTHONPATH=$(PYTHONPATH) $(PY) -m sim.build_grid
@@ -42,6 +46,6 @@ build-index:
 	  --historian $(HISTORIAN) --out $(INDEX_DIR)
 
 # §16 demo gate — full Plan B regeneration + Plan B test suite.
-plan_b_demo: build-grid
-	@echo "[plan_b_demo] historian.db, ga_fitness.csv, obituaries regenerated"
+plan_b_demo: train-ga build-grid build-index
+	@echo "[plan_b_demo] historian.db, lateon.index, ga_fitness.csv, and obituaries regenerated"
 	$(MAKE) test-plan-b

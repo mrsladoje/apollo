@@ -1,17 +1,6 @@
-"""§12.7 — index build acceptance.
-
-If ``pylate`` is installed and a model is reachable, build the real index
-and assert it ingested all rows. Otherwise build the dense-fallback index
-(which is the offline-default per §12.5) and assert the same property.
-The point is that *some* backend always indexes the corpus end-to-end.
-"""
+"""§12.7 — real PyLate / LateOn index build and search acceptance."""
 
 from __future__ import annotations
-
-import os
-import sqlite3
-
-import pytest
 
 from sim.config import SimulationConfig
 from sim.loop import run_simulation
@@ -45,12 +34,33 @@ def test_dense_index_indexes_every_row(tmp_path, monkeypatch):
     assert expected == 60 * 6
 
 
-def test_pylate_indexer_skipped_when_pylate_missing(tmp_path):
-    """When pylate is not installed (offline CI), the lateon path falls
-    back gracefully via ``sim.api`` — no exception leaks to the caller."""
-    pytest.importorskip("pylate", reason="pylate optional; dense fallback covers this gate")
+def test_pylate_indexer_writes_real_plaid_artifact(tmp_path, monkeypatch):
     from sim.retrieval.indexer import build_index
 
     db_path = _build_corpus(tmp_path, horizon=10)
-    n = build_index(str(db_path), str(tmp_path / "idx"))
+    index_path = tmp_path / "idx"
+    n = build_index(str(db_path), str(index_path))
     assert n == 10 * 6
+    assert index_path.exists()
+    assert not (index_path / "manifest.json").exists()
+
+
+def test_lateon_search_returns_typed_rows(tmp_path, monkeypatch):
+    from sim.retrieval import lateon
+    from sim.retrieval.indexer import build_index
+
+    db_path = _build_corpus(tmp_path, horizon=10)
+    index_path = tmp_path / "idx"
+    build_index(str(db_path), str(index_path))
+    monkeypatch.setenv("LATEON_INDEX_PATH", str(index_path))
+    monkeypatch.setenv("HISTORIAN_PATH", str(db_path))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+    lateon._model = None
+    lateon._index = None
+    lateon._retriever = None
+
+    rows = lateon.late_interaction_search("heater thermal cascade", top_k=3)
+
+    assert rows
+    assert all(r.snippet.startswith("[run=") for r in rows)

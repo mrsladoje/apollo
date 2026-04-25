@@ -78,15 +78,16 @@ def test_api_dense_retrieval_backend(monkeypatch, tmp_path):
     assert all(isinstance(r.component, ComponentId) for r in rows)
 
 
-def test_api_lateon_falls_back_when_unavailable(monkeypatch):
-    """If pylate or the index is missing, ``RETRIEVAL_BACKEND=lateon`` must
-    not crash — it falls back to dense and emits a warning."""
+def test_api_lateon_requires_index(monkeypatch):
+    """Default LateOn retrieval should fail loudly if the index is missing."""
     monkeypatch.setenv("RETRIEVAL_BACKEND", "lateon")
     monkeypatch.setenv("LATEON_INDEX_PATH", "/nonexistent/lateon.index")
+    monkeypatch.setenv("HISTORIAN_BACKEND", "mock")
     import sim.api as api
-    with pytest.warns(RuntimeWarning):
-        importlib.reload(api)
+    importlib.reload(api)
     assert callable(api.late_interaction_search)
+    with pytest.raises(Exception):
+        api.late_interaction_search("thermal cascade", top_k=1)
 
 
 def test_mock_historian_compare_runs_supports_all_metrics():

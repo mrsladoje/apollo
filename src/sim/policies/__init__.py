@@ -37,7 +37,14 @@ class FixedPolicy:
 class AIPolicy:
     """Tuned by GA in Workstream B5. (PLAN-B §8.2)"""
     def __init__(self, thresholds: dict[ComponentId, float] | None = None, lookahead_coef: float = 0.2):
-        self.thresholds = thresholds or {cid: 0.4 for cid in ComponentId}
+        self.thresholds = thresholds or {
+            ComponentId.BLADE: 0.50,
+            ComponentId.MOTOR: 0.55,
+            ComponentId.NOZZLE: 0.45,
+            ComponentId.RESISTOR: 0.50,
+            ComponentId.HEATER: 0.55,
+            ComponentId.INSULATION: 0.40,
+        }
         self.lookahead_coef = lookahead_coef
 
     def decide(self, state: EngineState, t: datetime) -> ComponentId | None:
@@ -46,12 +53,16 @@ class AIPolicy:
             if comp.health < self.thresholds.get(cid, 0.4):
                 return cid
         
-        # 2. Lookahead Check (ADR-011)
-        # In a real impl, we'd call engine.forecast()
-        # For mock, we'll just check if current health is approaching threshold
-        for cid, comp in state.components.items():
-            if comp.health < self.thresholds.get(cid, 0.4) + self.lookahead_coef:
-                # Predictive maintenance
-                return cid
+        # 2. Forecast lookahead check (ADR-011 / PLAN-B §8.2)
+        from engine import mock_engine as engine
+
+        horizon = max(1, min(60, int(60 * self.lookahead_coef)))
+        for forecast in engine.forecast(state, horizon_min=horizon):
+            trigger = max(
+                0.4,
+                self.thresholds.get(forecast.component_id, 0.4) + self.lookahead_coef,
+            )
+            if forecast.point < trigger:
+                return forecast.component_id
                 
         return None

@@ -74,13 +74,18 @@ def test_every_citation_is_resolvable(tmp_path):
         citations = json.loads(cit_json)
         for c in citations:
             t_iso = c["t"]
-            comp = c["component"]
-            # The citation's component_states row must exist.
-            row = conn.execute(
-                """SELECT 1 FROM component_states
-                   WHERE run_id = ? AND component_id = ? AND t = ?""",
-                (c["run_id"], comp, t_iso),
-            ).fetchone()
+            if "component" in c:
+                row = conn.execute(
+                    """SELECT 1 FROM component_states
+                       WHERE run_id = ? AND component_id = ? AND t = ?""",
+                    (c["run_id"], c["component"], t_iso),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT 1 FROM drivers
+                       WHERE run_id = ? AND t = ?""",
+                    (c["run_id"], t_iso),
+                ).fetchone()
             assert row is not None, f"unresolvable citation {c}"
 
 

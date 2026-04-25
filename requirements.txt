@@ -1,6 +1,6 @@
 numpy>=1.26
 pydantic>=2.5
-deap>=1.4.4
-pylate>=0.1
 PyYAML>=6.0
-pyyaml
+deap>=1.4.4
+optuna>=4.8
+pylate>=1.4.0

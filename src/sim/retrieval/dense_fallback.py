@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -83,6 +84,32 @@ def _build_index(historian_path: str) -> Dict:
     }
 
 
+def build_dense_index(historian_path: str, index_path: str) -> int:
+    """Persist an offline dense-fallback index artifact.
+
+    The runtime dense backend rebuilds its in-memory vectors lazily from the
+    historian, but PLAN-B's demo target requires an index directory to exist
+    after ``make build-index``. This writes a deterministic manifest plus the
+    snippet corpus so the artifact is inspectable and rebuildable offline.
+    """
+    os.makedirs(index_path, exist_ok=True)
+    state = _build_index(historian_path)
+    snippets: List[HistorianSnippet] = state["snippets"]
+    manifest = {
+        "backend": "dense-fallback",
+        "historian_path": historian_path,
+        "document_count": len(snippets),
+        "dimension": _DIM,
+    }
+    with open(os.path.join(index_path, "manifest.json"), "w") as fh:
+        json.dump(manifest, fh, sort_keys=True, indent=2)
+        fh.write("\n")
+    with open(os.path.join(index_path, "snippets.jsonl"), "w") as fh:
+        for snip in snippets:
+            fh.write(json.dumps(snip.__dict__, sort_keys=True) + "\n")
+    return len(snippets)
+
+
 def _ensure_index(historian_path: str) -> Dict:
     global _index_state
     if _index_state is None or _index_state["historian_path"] != historian_path:
@@ -138,4 +165,4 @@ def late_interaction_search(
     return out
 
 
-__all__ = ["late_interaction_search", "reset_index"]
+__all__ = ["build_dense_index", "late_interaction_search", "reset_index"]

@@ -14,7 +14,7 @@ from engine.contracts import (
 
 from .analytics.obituary import generate_obituary
 from .config import SimulationConfig
-from .drivers.composite import CompositeDriverProvider
+from .drivers.factory import build_drivers
 from .historian.writer import HistorianWriter
 from .policies import AIPolicy, FixedPolicy, NonePolicy
 
@@ -52,7 +52,7 @@ def run_simulation(cfg: SimulationConfig) -> str:
         )
 
         state = engine.initial_state(cfg.scenario_name, cfg.seed)
-        drivers_provider = CompositeDriverProvider()
+        drivers_provider = build_drivers(cfg)
 
         if cfg.policy == "none":
             policy = NonePolicy()
@@ -76,17 +76,9 @@ def run_simulation(cfg: SimulationConfig) -> str:
             state = engine.step(state, drivers, cfg.time_step_minutes)
             invocation_count += 1
 
-            action_cid = policy.decide(state, t)
-            if action_cid is not None:
-                # ``engine.apply_maintenance`` is not on Plan A's mock contract
-                # yet (PLAN-A §4 mock is decay-only). We apply the boost on
-                # the B side and ``_apply_maintenance_memory`` below smooths
-                # the boost over subsequent ticks until Plan A ships the
-                # real surface.
-                state = _apply_maintenance(state, action_cid)
-                maintenance_clock[action_cid] = t
-                writer.log_event(run_id, t, action_cid, "MAINTENANCE", "policy")
-
+            # Keep prior maintenance actions visible, but persist the tick
+            # before deciding/applying any new action at the same timestamp.
+            # This matches PLAN-B §7.1: step -> persist -> policy -> event.
             state = _apply_maintenance_memory(state, maintenance_clock, t)
 
             # Persist (FR-2.3)
@@ -99,6 +91,9 @@ def run_simulation(cfg: SimulationConfig) -> str:
                     comp.status == ComponentStatus.FAILED
                     and not writer.has_obituary(run_id, cid)
                 ):
+                    # Obituary attribution reads through a separate connection,
+                    # so flush the current tick before resolving citations.
+                    writer.flush()
                     obit = generate_obituary(
                         run_id, cid, t, state, db_path=cfg.historian_path
                     )
@@ -114,6 +109,17 @@ def run_simulation(cfg: SimulationConfig) -> str:
             tick_window = max(cfg.time_step_minutes, 1)
             if elapsed_minutes % CHECKPOINT_INTERVAL_MIN < tick_window:
                 writer.log_checkpoint(run_id, t, state)
+
+            action_cid = policy.decide(state, t)
+            if action_cid is not None:
+                # ``engine.apply_maintenance`` is not on Plan A's mock contract
+                # yet (PLAN-A §4 mock is decay-only). We apply the boost on
+                # the B side and ``_apply_maintenance_memory`` below smooths
+                # the boost over subsequent ticks until Plan A ships the
+                # real surface.
+                state = _apply_maintenance(state, action_cid)
+                maintenance_clock[action_cid] = t
+                writer.log_event(run_id, t, action_cid, "MAINTENANCE", "policy")
 
             t += timedelta(minutes=cfg.time_step_minutes)
 

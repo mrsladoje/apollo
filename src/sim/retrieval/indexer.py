@@ -1,9 +1,8 @@
 """PyLate / PLAID index builder — PLAN-B §12.1.
 
-Lazy-imports ``pylate`` so machines without the heavy dep can still load
-the rest of the package (R-7 / offline CI). Snippet construction is shared
-with the dense fallback via ``_snippets.stream_snippets`` so the corpus
-matches across backends.
+Builds the planned LateOn-Code-edge PLAID index. PyLate is a required
+runtime dependency for this entry point; the dense fallback remains available
+only through ``RETRIEVAL_BACKEND=dense`` per PLAN-B §12.5.
 
 Run as a script:
 
@@ -14,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Iterable, List
+from typing import List
 
 from ._snippets import HistorianSnippet, stream_snippets
 
@@ -33,16 +32,17 @@ def build_index(
     encode+add pass is cheap. Re-running with ``override=True`` rewrites the
     folder so this is the canonical "rebuild the demo index" entry point.
     """
-    from pylate import indexes, models  # type: ignore  # heavy, lazy
-
     os.makedirs(os.path.dirname(index_path) or ".", exist_ok=True)
-
-    model = models.ColBERT(model_name)
-    index = indexes.PLAID(index_folder=index_path, override=True)
 
     snippets: List[HistorianSnippet] = list(stream_snippets(historian_path))
     if not snippets:
+        os.makedirs(index_path, exist_ok=True)
         return 0
+
+    from pylate import indexes, models  # type: ignore  # heavy, lazy
+
+    model = models.ColBERT(model_name)
+    index = indexes.PLAID(index_folder=index_path, override=True)
 
     docs = [s.text for s in snippets]
     doc_ids = [s.doc_id for s in snippets]

@@ -76,6 +76,52 @@ def _reconstruct_from_history(
     )
 
 
+def _replay_from_start(
+    run_id: str,
+    branch_t: datetime,
+    scenario_name: str,
+    seed: int,
+    time_step_minutes: int,
+    db_path: str,
+) -> EngineState:
+    """Rebuild state by replaying the original run when checkpoints are absent."""
+    from sim.loop import _apply_maintenance, _apply_maintenance_memory
+
+    conn = connect(db_path)
+    try:
+        events = conn.execute(
+            """SELECT t, component_id
+               FROM maintenance_events
+               WHERE run_id = ? AND t <= ?
+               ORDER BY t ASC""",
+            (run_id, branch_t.isoformat()),
+        ).fetchall()
+    finally:
+        conn.close()
+    events_by_t: Dict[datetime, List[ComponentId]] = {}
+    for row in events:
+        events_by_t.setdefault(datetime.fromisoformat(row["t"]), []).append(
+            ComponentId(row["component_id"])
+        )
+
+    state = engine.initial_state(scenario_name, seed)
+    drivers_provider = CompositeDriverProvider()
+    maintenance_clock: Dict[ComponentId, datetime] = {}
+    cursor = SIM_START_TIME
+    while cursor <= branch_t:
+        drivers = drivers_provider.get(cursor, scenario_name, seed)
+        state = engine.step(state, drivers, time_step_minutes)
+        state = _apply_maintenance_memory(state, maintenance_clock, cursor)
+        if cursor == branch_t:
+            return state
+        for cid in events_by_t.get(cursor, []):
+            state = _apply_maintenance(state, cid)
+            maintenance_clock[cid] = cursor
+        cursor += timedelta(minutes=time_step_minutes)
+
+    return _reconstruct_from_history(run_id, branch_t, db_path)
+
+
 def _apply_alternate(state: EngineState, action: Dict[str, Any]) -> EngineState:
     if action.get("action") in ("MAINTENANCE", "swap_blade", "swap"):
         from sim.loop import _apply_maintenance
@@ -120,18 +166,48 @@ def run_counterfactual(
     end_time = SIM_START_TIME + timedelta(minutes=horizon_minutes)
 
     if cp is not None:
+        from sim.loop import _apply_maintenance, _apply_maintenance_memory
+
         state, cp_t = cp
         # Replay forward from checkpoint to branch_t to materialize the exact
         # state at the requested branch — keeps determinism even when the
         # checkpoint cadence does not align with branch_t.
         state = deepcopy(state)
+        conn = connect(db_path)
+        try:
+            events = conn.execute(
+                """SELECT t, component_id
+                   FROM maintenance_events
+                   WHERE run_id = ? AND t >= ? AND t < ?
+                   ORDER BY t ASC""",
+                (run_id, cp_t.isoformat(), branch_t.isoformat()),
+            ).fetchall()
+        finally:
+            conn.close()
+        events_by_t: Dict[datetime, List[ComponentId]] = {}
+        for row in events:
+            events_by_t.setdefault(datetime.fromisoformat(row["t"]), []).append(
+                ComponentId(row["component_id"])
+            )
+        maintenance_clock: Dict[ComponentId, datetime] = {}
         cursor = cp_t
         while cursor < branch_t:
+            for cid in events_by_t.get(cursor, []):
+                state = _apply_maintenance(state, cid)
+                maintenance_clock[cid] = cursor
+            cursor += timedelta(minutes=time_step_minutes)
             drivers = drivers_provider.get(cursor, scenario_name, seed)
             state = engine.step(state, drivers, time_step_minutes)
-            cursor += timedelta(minutes=time_step_minutes)
+            state = _apply_maintenance_memory(state, maintenance_clock, cursor)
     else:
-        state = _reconstruct_from_history(run_id, branch_t, db_path)
+        state = _replay_from_start(
+            run_id,
+            branch_t,
+            scenario_name,
+            seed,
+            time_step_minutes,
+            db_path,
+        )
 
     state = _apply_alternate(state, alternate_action)
 
@@ -155,7 +231,7 @@ def run_counterfactual(
         t += timedelta(minutes=time_step_minutes)
 
     original = query_historian(run_id, None, (branch_t, end_time), db_path=db_path)
-    diff = _compute_diff(original, alt_rows, time_step_minutes)
+    diff = _compute_diff(original, alt_rows, time_step_minutes, alternate_action)
     return CounterfactualResult(original=original, alternate=alt_rows, diff=diff)
 
 
@@ -163,6 +239,7 @@ def _compute_diff(
     original: List[HistorianRow],
     alternate: List[HistorianRow],
     time_step_minutes: int,
+    alternate_action: Dict[str, Any],
 ) -> Dict[str, float]:
     def uptime_minutes(rows: List[HistorianRow]) -> int:
         by_t: Dict[datetime, bool] = {}
@@ -186,9 +263,25 @@ def _compute_diff(
         # Minutes regained (positive = alternate ran longer without failures).
         "uptime_delta": float(alt_up - orig_up),
         "failures_avoided": float(orig_fails - alt_fails),
-        # Crude cost proxy: $10 per minute of uptime gained, signed.
-        "cost_delta": float((alt_up - orig_up) * 10.0),
+        # Signed intervention-cost delta per PLAN-B §10.4. The counterfactual
+        # engine does not persist alternate maintenance events, so the action
+        # payload carries the optional cost estimate for the branch.
+        "cost_delta": float(
+            _cost_estimate(alternate_action, alternate)
+            - _cost_estimate(None, original)
+        ),
     }
+
+
+def _cost_estimate(
+    alternate_action: Optional[Dict[str, Any]],
+    rows: List[HistorianRow],
+) -> float:
+    failed_components = {r.component_id for r in rows if r.status == ComponentStatus.FAILED}
+    action_cost = 0.0
+    if alternate_action and alternate_action.get("action") not in (None, "noop", "no-op"):
+        action_cost = float(alternate_action.get("cost", 1.0))
+    return action_cost + 50.0 * len(failed_components)
 
 
 __all__ = ["run_counterfactual"]

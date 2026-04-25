@@ -10,6 +10,7 @@ Frozen at hour zero. Any change requires a written ADR amendment.
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict
@@ -33,7 +34,10 @@ def query_historian(
     time_range: Optional[Tuple[datetime, datetime]] = None,
 ) -> List[HistorianRow]:
     """Query the historian for a specific run and component."""
-    from sim.historian.reader import query_historian as _query_historian
+    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+        from sim.mocks.historian_mock import query_historian as _query_historian
+    else:
+        from sim.historian.reader import query_historian as _query_historian
 
     return _query_historian(run_id, component, time_range)
 
@@ -43,7 +47,10 @@ def compare_runs(run_ids: List[str], metric: str) -> Dict[str, float]:
 
     Returns ``{run_id: float, ...}``. Plan C charts this directly.
     """
-    from sim.historian.reader import compare_runs as _compare_runs
+    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+        from sim.mocks.historian_mock import compare_runs as _compare_runs
+    else:
+        from sim.historian.reader import compare_runs as _compare_runs
 
     return _compare_runs(run_ids, metric)
 
@@ -61,7 +68,10 @@ def run_counterfactual(
     alternate_action: Dict[str, Any],
 ) -> CounterfactualResult:
     """Run a counterfactual simulation branching from a specific point in time."""
-    from sim.counterfactual.engine import run_counterfactual as _run_counterfactual
+    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+        from sim.mocks.counterfactual_mock import run_counterfactual as _run_counterfactual
+    else:
+        from sim.counterfactual.engine import run_counterfactual as _run_counterfactual
 
     return _run_counterfactual(run_id, branch_t, alternate_action)
 
@@ -81,11 +91,21 @@ def late_interaction_search(
     top_k: int = 10,
 ) -> List[RetrievedRow]:
     """Perform a late-interaction semantic search over the historian data."""
-    from sim.retrieval.search_mock import (
-        late_interaction_search as _late_interaction_search,
-    )
+    backend = os.environ.get("RETRIEVAL_BACKEND", "lateon").lower()
 
-    return _late_interaction_search(query, run_id, top_k)
+    if backend == "mock":
+        from sim.retrieval.search_mock import late_interaction_search as _search
+
+        return _search(query, run_id, top_k)
+
+    if backend == "dense":
+        from sim.retrieval.dense_fallback import late_interaction_search as _search
+
+        return _search(query, run_id, top_k)
+
+    from sim.retrieval.lateon import late_interaction_search as _search
+
+    return _search(query, run_id, top_k)
 
 
 __all__ = [
