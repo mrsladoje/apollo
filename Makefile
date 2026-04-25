@@ -6,9 +6,9 @@ INDEX_DIR ?= data/lateon.index
 COV_TARGET ?= sim
 COV_FAIL_UNDER ?= 85
 
-.PHONY: test test-engine test-plan-b regen-golden train-pinn \
+.PHONY: test test-engine test-plan-b test-plan-c test-gepa regen-golden train-pinn \
         cache-drivers train-ga build-grid build-index plan_b_demo \
-        demo-mock backend frontend install
+        demo-mock backend frontend install dryrun-wildcards
 
 install:
 	pip install -e ".[dev]"
@@ -21,9 +21,25 @@ frontend:
 	cd frontend && npm run dev
 
 demo-mock:
-	@echo "Starting Apollo mock demo..."
-	@PYTHONPATH=src uvicorn apollo.api.app:app --reload --port 8000 &
+	@echo "Starting Apollo mock demo (mocks-only, zero external deps)..."
+	@APOLLO_AGENT=mock APOLLO_TOOLS_BACKEND=mock HISTORIAN_BACKEND=mock RETRIEVAL_BACKEND=mock \
+	  PYTHONPATH=src uvicorn apollo.api.app:app --reload --port 8000 &
 	@cd frontend && npm run dev
+
+# Plan C §19 — single-command Definition-of-Done sweep.
+test-plan-c:
+	PYTHONPATH=src $(PY) -m pytest \
+	  tests/agent tests/sse tests/eval tests/architecture -q
+
+# Verifies the GEPA artifact + comparison gate (FR-W.10 / FR-W.11).
+test-gepa:
+	PYTHONPATH=src $(PY) scripts/agent/run_comparison.py --check
+	test -f config/agent.system_prompt.gepa.txt
+	test -f docs/eval/gepa_compile_log.json
+
+# Live "Ask Apollo" wildcard dry-run (FR-W.5).
+dryrun-wildcards:
+	PYTHONPATH=src $(PY) scripts/dryrun_wildcards.py
 
 # Default test target — engine only, fast.
 test:

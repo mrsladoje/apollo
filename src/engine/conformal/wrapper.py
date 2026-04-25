@@ -240,11 +240,30 @@ class ConformalForecaster:
         )
 
 
-def forecast_all_components(state: EngineState, horizon_min: int) -> List[Forecast]:
+# Per-component ConformalForecaster instances are pinned at process scope
+# so the sim loop's per-tick `engine.forecast()` does not re-read residuals
+# from disk and re-build synthetic calibration arrays 600+ times per run.
+# The MAPIE model itself is already cached in `_FORECASTER_CACHE`; this
+# extra layer eliminates the surrounding I/O + numpy bookkeeping overhead.
+_INSTANCE_CACHE: dict = {}
+
+
+def _get_forecaster(component_id: ComponentId, ci_level: float) -> "ConformalForecaster":
+    key = (component_id, float(ci_level))
+    inst = _INSTANCE_CACHE.get(key)
+    if inst is None:
+        inst = ConformalForecaster(component_id, ci_level=ci_level)
+        _INSTANCE_CACHE[key] = inst
+    return inst
+
+
+def forecast_all_components(
+    state: EngineState, horizon_min: int, ci_level: float = 0.95
+) -> List[Forecast]:
     """Return 6 conformal Forecast rows in ROW_ORDER (FR-W.6)."""
     out: List[Forecast] = []
     for cid in ROW_ORDER:
-        f = ConformalForecaster(cid).predict(
+        f = _get_forecaster(cid, ci_level).predict(
             state.components[cid].health, horizon_min
         )
         out.append(f)

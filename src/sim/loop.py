@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Dict
 
-from engine import mock_engine as engine
+from engine import api as engine
 from engine.contracts import (
     ComponentId,
     ComponentState,
@@ -137,25 +137,38 @@ def run_simulation(cfg: SimulationConfig) -> str:
     return run_id
 
 def _apply_maintenance(state: EngineState, component_id: ComponentId) -> EngineState:
-    """Helper to 'reset' health in the state. 
-    Note: Plan A's mock_engine will overwrite this in the next step() call 
-    because it's a function of drivers.hours. This is a known limitation of the mock.
+    """Reset a component's health to 1.0 in the EngineState aggregate.
+
+    The real engine ``step()`` is path-dependent: a maintained component's
+    intrinsic decay is computed off its current health each tick, so unlike
+    the mock the engine does NOT overwrite this on the next call. Plan B
+    therefore owns the maintenance event and the engine accepts the new
+    health on the very next ``step()``.
     """
     new_components = dict(state.components)
     comp = new_components[component_id]
-    
-    # Pydantic models are frozen, so we use model_copy
-    new_comp = comp.model_copy(update={"health": 1.0, "status": ComponentStatus.FUNCTIONAL})
+    new_comp = comp.model_copy(
+        update={"health": 1.0, "status": ComponentStatus.FUNCTIONAL}
+    )
     new_components[component_id] = new_comp
-    
     return state.model_copy(update={"components": new_components})
+
 
 def _apply_maintenance_memory(
     state: EngineState,
     maintenance_clock: Dict[ComponentId, datetime],
     t: datetime,
 ) -> EngineState:
-    """Keep Plan B policy effects visible while Plan A is still mocked."""
+    """Smooth a maintenance reset into a slow re-decay window.
+
+    Originally introduced to keep policy effects visible while the engine
+    was mocked (the mock derived health from ``drivers.hours`` and would
+    overwrite the reset on the next tick). The real engine carries health
+    forward, but the slow ramp-down still produces a more demo-friendly
+    "freshly maintained" plateau than letting the engine immediately bite
+    back into a 1.0 component, so the helper is retained as a Plan-B-side
+    smoothing layer with no engine contract leakage.
+    """
     if not maintenance_clock:
         return state
 

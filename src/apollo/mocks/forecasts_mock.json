@@ -1,0 +1,42 @@
+{
+  "_doc": "Pre-canned Forecast payloads (PLAN-C §4.1) — point + lower + upper + ci_level per component per timestep for one canonical run. Schema matches engine.contracts.Forecast (PLAN-A §3.1, ADR-015).",
+  "run_id": "barcelona-humid-ai-seed0042",
+  "ci_level": 0.95,
+  "horizon_min": 10,
+  "forecasts": [
+    {"t": "2026-04-25T08:00:00", "component_id": "blade",      "horizon_min": 10, "point": 0.985, "lower": 0.96, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:00:00", "component_id": "motor",      "horizon_min": 10, "point": 0.990, "lower": 0.97, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:00:00", "component_id": "nozzle",     "horizon_min": 10, "point": 0.978, "lower": 0.95, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:00:00", "component_id": "resistor",   "horizon_min": 10, "point": 0.992, "lower": 0.97, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:00:00", "component_id": "heater",     "horizon_min": 10, "point": 0.987, "lower": 0.96, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:00:00", "component_id": "insulation", "horizon_min": 10, "point": 0.991, "lower": 0.97, "upper": 1.00, "ci_level": 0.95},
+
+    {"t": "2026-04-25T08:30:00", "component_id": "blade",      "horizon_min": 10, "point": 0.910, "lower": 0.86, "upper": 0.96, "ci_level": 0.95},
+    {"t": "2026-04-25T08:30:00", "component_id": "motor",      "horizon_min": 10, "point": 0.945, "lower": 0.91, "upper": 0.99, "ci_level": 0.95},
+    {"t": "2026-04-25T08:30:00", "component_id": "nozzle",     "horizon_min": 10, "point": 0.880, "lower": 0.82, "upper": 0.94, "ci_level": 0.95},
+    {"t": "2026-04-25T08:30:00", "component_id": "resistor",   "horizon_min": 10, "point": 0.962, "lower": 0.92, "upper": 1.00, "ci_level": 0.95},
+    {"t": "2026-04-25T08:30:00", "component_id": "heater",     "horizon_min": 10, "point": 0.928, "lower": 0.88, "upper": 0.97, "ci_level": 0.95},
+    {"t": "2026-04-25T08:30:00", "component_id": "insulation", "horizon_min": 10, "point": 0.957, "lower": 0.91, "upper": 1.00, "ci_level": 0.95},
+
+    {"t": "2026-04-25T09:00:00", "component_id": "blade",      "horizon_min": 10, "point": 0.820, "lower": 0.76, "upper": 0.88, "ci_level": 0.95},
+    {"t": "2026-04-25T09:00:00", "component_id": "motor",      "horizon_min": 10, "point": 0.890, "lower": 0.84, "upper": 0.94, "ci_level": 0.95},
+    {"t": "2026-04-25T09:00:00", "component_id": "nozzle",     "horizon_min": 10, "point": 0.755, "lower": 0.69, "upper": 0.82, "ci_level": 0.95},
+    {"t": "2026-04-25T09:00:00", "component_id": "resistor",   "horizon_min": 10, "point": 0.918, "lower": 0.86, "upper": 0.97, "ci_level": 0.95},
+    {"t": "2026-04-25T09:00:00", "component_id": "heater",     "horizon_min": 10, "point": 0.860, "lower": 0.80, "upper": 0.92, "ci_level": 0.95},
+    {"t": "2026-04-25T09:00:00", "component_id": "insulation", "horizon_min": 10, "point": 0.910, "lower": 0.86, "upper": 0.96, "ci_level": 0.95},
+
+    {"t": "2026-04-25T09:30:00", "component_id": "blade",      "horizon_min": 10, "point": 0.690, "lower": 0.62, "upper": 0.76, "ci_level": 0.95},
+    {"t": "2026-04-25T09:30:00", "component_id": "motor",      "horizon_min": 10, "point": 0.815, "lower": 0.76, "upper": 0.87, "ci_level": 0.95},
+    {"t": "2026-04-25T09:30:00", "component_id": "nozzle",     "horizon_min": 10, "point": 0.605, "lower": 0.53, "upper": 0.68, "ci_level": 0.95},
+    {"t": "2026-04-25T09:30:00", "component_id": "resistor",   "horizon_min": 10, "point": 0.860, "lower": 0.79, "upper": 0.93, "ci_level": 0.95},
+    {"t": "2026-04-25T09:30:00", "component_id": "heater",     "horizon_min": 10, "point": 0.770, "lower": 0.71, "upper": 0.83, "ci_level": 0.95},
+    {"t": "2026-04-25T09:30:00", "component_id": "insulation", "horizon_min": 10, "point": 0.855, "lower": 0.79, "upper": 0.92, "ci_level": 0.95},
+
+    {"t": "2026-04-25T10:00:00", "component_id": "blade",      "horizon_min": 10, "point": 0.530, "lower": 0.45, "upper": 0.61, "ci_level": 0.95},
+    {"t": "2026-04-25T10:00:00", "component_id": "motor",      "horizon_min": 10, "point": 0.720, "lower": 0.66, "upper": 0.78, "ci_level": 0.95},
+    {"t": "2026-04-25T10:00:00", "component_id": "nozzle",     "horizon_min": 10, "point": 0.430, "lower": 0.36, "upper": 0.50, "ci_level": 0.95},
+    {"t": "2026-04-25T10:00:00", "component_id": "resistor",   "horizon_min": 10, "point": 0.795, "lower": 0.72, "upper": 0.87, "ci_level": 0.95},
+    {"t": "2026-04-25T10:00:00", "component_id": "heater",     "horizon_min": 10, "point": 0.665, "lower": 0.60, "upper": 0.73, "ci_level": 0.95},
+    {"t": "2026-04-25T10:00:00", "component_id": "insulation", "horizon_min": 10, "point": 0.785, "lower": 0.72, "upper": 0.85, "ci_level": 0.95}
+  ]
+}

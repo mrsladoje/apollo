@@ -1,10 +1,20 @@
-"""Chat route — POST /api/chat returns SSE stream (PLAN-C §5.1)."""
+"""Chat route — POST /api/chat returns SSE stream (PLAN-C §5.1).
+
+Behaviour:
+  * APOLLO_AGENT=mock         → canned ``stream_mock_events`` from agent_mock
+  * APOLLO_AGENT=loop (default) → real Apollo agent loop, deterministic seed
+                                  path falls back gracefully when DSPy/Gemma
+                                  aren't installed locally.
+"""
 
 from __future__ import annotations
+
+import os
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from apollo.agent.loop import AgentLoop
 from apollo.api.sse import event_stream
 from apollo.mocks.agent_mock import stream_mock_events
 
@@ -16,6 +26,23 @@ class ChatRequest(BaseModel):
     run_context: str | None = None
 
 
+def _agent_mode() -> str:
+    return os.environ.get("APOLLO_AGENT", "loop").lower()
+
+
+_loop_singleton: AgentLoop | None = None
+
+
+def get_loop() -> AgentLoop:
+    global _loop_singleton
+    if _loop_singleton is None:
+        _loop_singleton = AgentLoop()
+    return _loop_singleton
+
+
 @router.post("/chat")
 async def chat(req: ChatRequest):
-    return await event_stream(stream_mock_events(req.query))
+    if _agent_mode() == "mock":
+        return await event_stream(stream_mock_events(req.query))
+    loop = get_loop()
+    return await event_stream(loop.stream_events(req.query, req.run_context))

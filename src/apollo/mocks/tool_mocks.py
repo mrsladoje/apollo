@@ -9,7 +9,9 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-COMPONENTS = ["blade", "motor", "nozzle", "resistor", "heater", "insulation"]
+from engine.contracts import ComponentId
+
+COMPONENTS: list[str] = [c.value for c in ComponentId]
 
 # Canned historian rows keyed by (run_id, component)
 HISTORIAN_DATA: dict[tuple[str, str], list[dict]] = {}

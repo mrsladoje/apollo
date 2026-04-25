@@ -1,0 +1,26 @@
+# Apollo runtime LM configuration (PLAN-C §6.1, ADR-022).
+#
+# Pins Gemma 4 31B Dense as the runtime model. The seed system prompt lives
+# at src/apollo/agent/prompts/system.md; the GEPA-compiled artifact at
+# config/agent.system_prompt.gepa.txt takes precedence at startup when
+# present (PLAN-C §14a / FR-W.10).
+provider: openai
+model: google/gemma-4-31B-it
+api_base: ${GEMMA_API_BASE}
+api_key: ${GEMMA_API_KEY}
+
+# Runtime knobs (PLAN-C §6.4, NFR-5)
+max_tool_calls_per_turn: 3
+deep_investigation_extra: 2
+temperature: 0.0
+max_output_tokens: 1024
+
+# Prompt artifacts
+seed_prompt_path: src/apollo/agent/prompts/system.md
+compiled_prompt_path: config/agent.system_prompt.gepa.txt
+persona_prompt_path: src/apollo/agent/prompts/persona.md
+
+# Observability (ADR-016) — read by Langfuse env hooks
+trace_metadata:
+  agent_runtime_lm: google/gemma-4-31B-it
+  reflection_lm: claude_cli/opus-4-7

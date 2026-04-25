@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-25T21:45:30.771147Z",
+  "n_grounded": 24,
+  "n_unanswerable": 6,
+  "items": [
+    {
+      "id": "g-barcelona-humid-ai-seed0042-blade",
+      "question": "What was the blade health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The blade health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component blade at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "blade",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-ai-seed0042-motor",
+      "question": "What was the motor health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The motor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component motor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "motor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-ai-seed0042-nozzle",
+      "question": "What was the nozzle health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The nozzle health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component nozzle at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "nozzle",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-ai-seed0042-resistor",
+      "question": "What was the resistor health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The resistor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component resistor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "resistor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-ai-seed0042-heater",
+      "question": "What was the heater health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The heater health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component heater at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "heater",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-ai-seed0042-insulation",
+      "question": "What was the insulation health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The insulation health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-ai-seed0042, component insulation at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "insulation",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-blade",
+      "question": "What was the blade health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The blade health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component blade at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "blade",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-motor",
+      "question": "What was the motor health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The motor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component motor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "motor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-nozzle",
+      "question": "What was the nozzle health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The nozzle health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component nozzle at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "nozzle",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-resistor",
+      "question": "What was the resistor health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The resistor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component resistor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "resistor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-heater",
+      "question": "What was the heater health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The heater health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component heater at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "heater",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-fixed-seed0042-insulation",
+      "question": "What was the insulation health in run barcelona-humid-fixed-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The insulation health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-fixed-seed0042, component insulation at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-fixed-seed0042",
+      "expected_component": "insulation",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-blade",
+      "question": "What was the blade health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The blade health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component blade at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "blade",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-motor",
+      "question": "What was the motor health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The motor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component motor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "motor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-nozzle",
+      "question": "What was the nozzle health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The nozzle health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component nozzle at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "nozzle",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-resistor",
+      "question": "What was the resistor health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The resistor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component resistor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "resistor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-heater",
+      "question": "What was the heater health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The heater health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component heater at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "heater",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-barcelona-humid-none-seed0042-insulation",
+      "question": "What was the insulation health in run barcelona-humid-none-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The insulation health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run barcelona-humid-none-seed0042, component insulation at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "insulation",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-blade",
+      "question": "What was the blade health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The blade health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component blade at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "blade",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-motor",
+      "question": "What was the motor health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The motor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component motor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "motor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-nozzle",
+      "question": "What was the nozzle health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The nozzle health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component nozzle at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "nozzle",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-resistor",
+      "question": "What was the resistor health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The resistor health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component resistor at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "resistor",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-heater",
+      "question": "What was the heater health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The heater health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component heater at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "heater",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "g-phoenix-dry-ai-seed0042-insulation",
+      "question": "What was the insulation health in run phoenix-dry-ai-seed0042 at 2026-04-25T08:00:00?",
+      "ground_truth": "The insulation health was 1.000 (FUNCTIONAL).",
+      "contexts": [
+        "In run phoenix-dry-ai-seed0042, component insulation at 2026-04-25T08:00:00 had health 1.000 (FUNCTIONAL)."
+      ],
+      "expected_severity": "INFO",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "insulation",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "is_unanswerable": false
+    },
+    {
+      "id": "u-weather-madrid",
+      "question": "What is the weather in Madrid?",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    },
+    {
+      "id": "u-microwave",
+      "question": "Did the microwave component fail?",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    },
+    {
+      "id": "u-run-9999",
+      "question": "What was the bearing temperature in run-9999?",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    },
+    {
+      "id": "u-binder-viscosity",
+      "question": "Show me the binder viscosity timeline for run barcelona-01.",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    },
+    {
+      "id": "u-stock-price",
+      "question": "What is the HP stock price right now?",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    },
+    {
+      "id": "u-music-recommendation",
+      "question": "Recommend a song to listen to while debugging the printer.",
+      "ground_truth": "REFUSAL",
+      "contexts": [],
+      "expected_severity": "REFUSAL",
+      "is_unanswerable": true
+    }
+  ]
+}

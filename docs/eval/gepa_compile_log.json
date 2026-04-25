@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "started_at": "2026-04-25T21:47:53.547287Z",
+  "wall_clock_s": 0.0,
+  "max_metric_calls": 150,
+  "simulated": true,
+  "iterations": [
+    {
+      "step": 0,
+      "score": 0.62,
+      "feedback": "seed baseline"
+    },
+    {
+      "step": 5,
+      "score": 0.78,
+      "feedback": "tool-arg validity improved after schema reminder"
+    },
+    {
+      "step": 10,
+      "score": 0.86,
+      "feedback": "citation resolution feedback drove \u2193fabrication"
+    },
+    {
+      "step": 15,
+      "score": 0.94,
+      "feedback": "refusal template adoption complete"
+    },
+    {
+      "step": 20,
+      "score": 0.97,
+      "feedback": "valset plateau"
+    }
+  ],
+  "compiled_prompt_chars": 1369,
+  "compiled_prompt_path": "config/agent.system_prompt.gepa.txt"
+}

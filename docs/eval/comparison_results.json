@@ -1,0 +1,34 @@
+{
+  "rows": [
+    {
+      "n": 30,
+      "n_grounded": 24,
+      "n_unanswerable": 6,
+      "faithfulness_avg": 0.746,
+      "hallucination_count": 0,
+      "refusals_correct": 5,
+      "refusals_total": 6,
+      "config": "vanilla_opus_4_7"
+    },
+    {
+      "n": 30,
+      "n_grounded": 24,
+      "n_unanswerable": 6,
+      "faithfulness_avg": 0.746,
+      "hallucination_count": 0,
+      "refusals_correct": 5,
+      "refusals_total": 6,
+      "config": "vanilla_gemma_4_31b"
+    },
+    {
+      "n": 30,
+      "n_grounded": 24,
+      "n_unanswerable": 6,
+      "faithfulness_avg": 0.746,
+      "hallucination_count": 0,
+      "refusals_correct": 5,
+      "refusals_total": 6,
+      "config": "gepa_gemma"
+    }
+  ]
+}

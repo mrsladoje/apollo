@@ -1,0 +1,71 @@
+{
+  "_doc": "PLAN-C §15.1 — 10 unscripted-style judge questions for the live 'Ask Apollo' dry-run (FR-W.5).",
+  "items": [
+    {
+      "id": "w-01",
+      "question": "Which run had the worst nozzle damage and why?",
+      "expected_severity_in": ["WARNING", "CRITICAL", "INFO"],
+      "must_call_tool": "query_historian",
+      "is_unanswerable": false
+    },
+    {
+      "id": "w-02",
+      "question": "What if we replaced the insulation at hour 4 in barcelona-humid-ai-seed0042?",
+      "expected_severity_in": ["INFO"],
+      "must_call_tool": "run_counterfactual",
+      "is_unanswerable": false
+    },
+    {
+      "id": "w-03",
+      "question": "Compare heater health across all three universes for barcelona-humid-ai-seed0042 and barcelona-humid-fixed-seed0042 and barcelona-humid-none-seed0042.",
+      "expected_severity_in": ["INFO"],
+      "must_call_tool": "compare_runs",
+      "is_unanswerable": false
+    },
+    {
+      "id": "w-04",
+      "question": "Did the phoenix-dry-ai-seed0042 run see any thermal cycling stress?",
+      "expected_severity_in": ["INFO", "WARNING"],
+      "must_call_tool": "query_historian",
+      "is_unanswerable": false
+    },
+    {
+      "id": "w-05",
+      "question": "When did the Dark Twin lose its first component?",
+      "expected_severity_in": ["WARNING", "CRITICAL", "INFO"],
+      "must_call_tool": "query_historian",
+      "is_unanswerable": false
+    },
+    {
+      "id": "w-06",
+      "question": "What is the weather in Madrid?",
+      "expected_severity_in": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "w-07",
+      "question": "Did component microwave fail in barcelona-humid-ai-seed0042?",
+      "expected_severity_in": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "w-08",
+      "question": "What was the bearing temperature in run-9999?",
+      "expected_severity_in": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "w-09",
+      "question": "Show me the binder viscosity timeline for barcelona-humid-ai-seed0042.",
+      "expected_severity_in": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "w-10",
+      "question": "Why is Apollo confident the heater fails at hour 7 in barcelona-humid-ai-seed0042?",
+      "expected_severity_in": ["INFO", "WARNING"],
+      "must_call_tool": "query_historian",
+      "is_unanswerable": false
+    }
+  ]
+}

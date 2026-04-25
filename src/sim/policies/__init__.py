@@ -53,8 +53,11 @@ class AIPolicy:
             if comp.health < self.thresholds.get(cid, 0.4):
                 return cid
         
-        # 2. Forecast lookahead check (ADR-011 / PLAN-B §8.2)
-        from engine import mock_engine as engine
+        # 2. Forecast lookahead check (ADR-011 / PLAN-B §8.2). Routes via
+        # engine.api so APOLLO_ENGINE=mock still works for dry-run smoke
+        # tests while the default path exercises the real MAPIE conformal
+        # layer (Workstream A5).
+        from engine import api as engine
 
         horizon = max(1, min(60, int(60 * self.lookahead_coef)))
         for forecast in engine.forecast(state, horizon_min=horizon):

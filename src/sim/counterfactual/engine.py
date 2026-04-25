@@ -19,7 +19,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from engine import mock_engine as engine
+from engine import api as engine
 from engine.contracts import (
     ComponentId,
     ComponentState,
@@ -211,9 +211,28 @@ def run_counterfactual(
 
     state = _apply_alternate(state, alternate_action)
 
+    # Reconstruct the alternate timeline with the same row semantics as
+    # ``sim.loop.run_simulation``: the row at time ``t`` is the state AFTER
+    # ``engine.step()`` was called once with ``drivers.get(t)``. The loaded
+    # checkpoint already represents that post-step state at ``branch_t``,
+    # so we persist it directly and only call ``engine.step`` for strictly
+    # later timestamps. The mock engine was idempotent in ``drivers.hours``
+    # so the previous "step then persist at t=branch_t" pattern looked
+    # equivalent; the real engine is path-dependent and would double-step.
     alt_rows: List[HistorianRow] = []
     cf_run_id = run_id + "-cf"
-    t = branch_t
+    for cid, cstate in state.components.items():
+        alt_rows.append(
+            HistorianRow(
+                run_id=cf_run_id,
+                t=branch_t,
+                component_id=cid,
+                health=cstate.health,
+                status=cstate.status,
+                metrics=cstate.metrics,
+            )
+        )
+    t = branch_t + timedelta(minutes=time_step_minutes)
     while t < end_time:
         drivers = drivers_provider.get(t, scenario_name, seed)
         state = engine.step(state, drivers, time_step_minutes)

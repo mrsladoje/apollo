@@ -10,6 +10,8 @@ from typing import AsyncIterator
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
+from engine.contracts import ComponentId
+
 router = APIRouter(prefix="/api/sim")
 
 UNIVERSES = [
@@ -18,7 +20,8 @@ UNIVERSES = [
     {"id": "apollo", "label": "Universe C — Apollo (AI)", "run_id": "apollo-03"},
 ]
 
-COMPONENTS = ["blade", "motor", "nozzle", "resistor", "heater", "insulation"]
+COMPONENTS: list[str] = [c.value for c in ComponentId]
+_FORECAST_COMPONENTS: list[ComponentId] = [ComponentId.HEATER, ComponentId.NOZZLE]
 
 
 @router.get("/runs")
@@ -72,7 +75,8 @@ async def _sim_events(run_id: str, universe_id: str, seed: int) -> AsyncIterator
 
         # Emit forecasts for a couple of components every 10 ticks
         if t % 10 == 0:
-            for comp in ["heater", "nozzle"]:
+            for comp_id in _FORECAST_COMPONENTS:
+                comp = comp_id.value
                 h = health[comp]
                 band = {
                     "type": "forecast",

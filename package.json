@@ -1,4 +1,10 @@
 {
+  "name": "apollo-root",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "test:ui": "cd frontend && npm run test:ui --"
+  },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "autoprefixer": "^10.5.0",
