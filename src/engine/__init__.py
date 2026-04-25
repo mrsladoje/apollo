@@ -7,4 +7,4 @@ frozen schemas in `engine.contracts`. Everything else is implementation detail.
 PLAN-A §13.3.
 """
 
-__version__ = "0.1.0-mock"
+__version__ = "1.0.0"

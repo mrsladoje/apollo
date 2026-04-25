@@ -32,7 +32,7 @@ where = ["src"]
 py-modules = ["apollo_pytest_shim"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
     "slow: PLAN-A §10.4 long-running tests (e.g. conformal coverage gate)",
