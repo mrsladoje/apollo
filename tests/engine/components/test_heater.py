@@ -68,7 +68,12 @@ def test_heater_metrics_keys_present():
     keys = set(
         heater.emit_metrics(isolated_state(ComponentId.HEATER, 0.5), make_drivers()).keys()
     )
-    assert keys == {"temp_x0_C", "temp_xmid_C", "temp_xL_C", "drift_pct"}
+    assert keys == {
+        "predicted_temp_field_x0_C",
+        "predicted_temp_field_xmid_C",
+        "predicted_temp_field_xL_C",
+        "drift_pct",
+    }
 
 
 def test_heater_determinism():

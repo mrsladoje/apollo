@@ -24,14 +24,16 @@ from engine.contracts import (
     COUPLING_MATRIX_M,
     ComponentId,
     ComponentState,
+    ComponentStatus,
     Drivers,
+    EngineEvent,
+    EngineEventType,
     EngineState,
     Forecast,
     ROW_ORDER,
     status_for_health,
 )
 from engine.coupling import apply_coupling
-from engine.components.heater import _SAMPLE_X as _HEATER_SAMPLE_X
 
 
 def _is_mock() -> bool:
@@ -99,6 +101,7 @@ def initial_state(scenario: str = "default", seed: int = 0) -> EngineState:
         components=states,
         coupling_matrix=[list(row) for row in COUPLING_MATRIX_M],
         rng_state=tuple(_serialize_rng_state(rng)),
+        events=(),
     )
 
 
@@ -117,6 +120,7 @@ def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState:
 
     components = _components()
     rng = _restore_rng_state(state.rng_state)
+    heater_field = None
 
     # 1) intrinsic decay per component (rule-based or PINN call).
     healths = np.array(
@@ -124,18 +128,26 @@ def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState:
     )
     intrinsic = np.zeros(6, dtype=np.float64)
     for i, cid in enumerate(ROW_ORDER):
-        intrinsic[i] = components[cid].intrinsic_decay(
-            state.components[cid], drivers, dt, rng
-        )
+        component = components[cid]
+        if cid is ComponentId.HEATER:
+            heater_field = component._temp_field(drivers)
+            intrinsic[i] = component.intrinsic_decay_from_field(
+                state.components[cid], drivers, dt, rng, heater_field
+            )
+        else:
+            intrinsic[i] = component.intrinsic_decay(
+                state.components[cid], drivers, dt, rng
+            )
 
     # 2) matrix coupling (CSC-A and CSC-C ride here; CSC-B participates).
     new_healths = apply_coupling(healths, intrinsic, dt)
 
     # 3) CSC-B explicit physics layered on top of the matrix.
     heater = components[ComponentId.HEATER]
-    field = heater._temp_field(drivers)
+    if heater_field is None:
+        heater_field = heater._temp_field(drivers)
     swing, ambient_C, cycles_step = _csc_b.csc_b_inputs_from(
-        drivers.temp_C, field, heater.duty_cycles_per_min, dt
+        drivers.temp_C, heater_field, heater.duty_cycles_per_min, dt
     )
     new_healths = _csc_b.apply_csc_b(
         new_healths,
@@ -149,22 +161,29 @@ def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState:
     next_components = {}
     for i, cid in enumerate(ROW_ORDER):
         h = float(new_healths[i])
+        next_status = status_for_health(h)
+        metric_state = ComponentState(
+            component_id=cid, health=h, status=next_status, metrics={}
+        )
+        if cid is ComponentId.HEATER:
+            metrics = components[cid].emit_metrics_from_field(
+                metric_state, drivers, heater_field
+            )
+        else:
+            metrics = components[cid].emit_metrics(metric_state, drivers)
         next_components[cid] = ComponentState(
             component_id=cid,
             health=h,
-            status=status_for_health(h),
-            metrics=components[cid].emit_metrics(
-                ComponentState(
-                    component_id=cid, health=h, status=status_for_health(h), metrics={}
-                ),
-                drivers,
-            ),
+            status=next_status,
+            metrics=metrics,
         )
+    events = _domain_events(state.components, next_components)
 
     return EngineState(
         components=next_components,
         coupling_matrix=state.coupling_matrix,
         rng_state=tuple(_serialize_rng_state(rng)),
+        events=tuple(events),
     )
 
 
@@ -226,6 +245,54 @@ def _thaw(obj):
     if isinstance(obj, tuple):
         return tuple(_thaw(x) for x in obj)
     return obj
+
+
+def _domain_events(
+    previous: dict[ComponentId, ComponentState],
+    current: dict[ComponentId, ComponentState],
+) -> list[EngineEvent]:
+    events: list[EngineEvent] = []
+    for cid in ROW_ORDER:
+        old = previous[cid]
+        new = current[cid]
+        if old.status is ComponentStatus.FUNCTIONAL and new.status is ComponentStatus.DEGRADED:
+            events.append(
+                EngineEvent(
+                    event_type=EngineEventType.COMPONENT_DEGRADED,
+                    component_id=cid,
+                    previous_status=old.status,
+                    new_status=new.status,
+                )
+            )
+        if old.status is not ComponentStatus.FAILED and new.status is ComponentStatus.FAILED:
+            events.append(
+                EngineEvent(
+                    event_type=EngineEventType.COMPONENT_FAILED,
+                    component_id=cid,
+                    previous_status=old.status,
+                    new_status=new.status,
+                )
+            )
+        if old.health >= 0.7 and new.health < 0.7:
+            for cascade_id in _cascades_triggered_by(cid):
+                events.append(
+                    EngineEvent(
+                        event_type=EngineEventType.CASCADE_TRIGGERED,
+                        component_id=cid,
+                        cascade_id=cascade_id,
+                        previous_status=old.status,
+                        new_status=new.status,
+                    )
+                )
+    return events
+
+
+def _cascades_triggered_by(component_id: ComponentId) -> tuple[str, ...]:
+    if component_id is ComponentId.BLADE:
+        return ("CSC-A", "CSC-C")
+    if component_id in {ComponentId.INSULATION, ComponentId.HEATER, ComponentId.NOZZLE}:
+        return ("CSC-B",)
+    return ()
 
 
 __all__ = ["step", "forecast", "initial_state"]

@@ -110,9 +110,12 @@ def _metrics_for(component: ComponentId, health: float, drivers: Drivers) -> dic
         }
     if component is ComponentId.HEATER:
         drift = mock_pinn(drivers.temp_C, drivers.hours)
+        hot_side = drivers.temp_C + 100.0 * (1.0 - 0.3 * (1.0 - health))
         return {
             "drift_pct": round(drift, 6),
-            "predicted_temp_C": round(drivers.temp_C + 100.0 * (1.0 - 0.3 * (1.0 - health)), 6),
+            "predicted_temp_field_x0_C": round(hot_side, 6),
+            "predicted_temp_field_xmid_C": round((hot_side + drivers.temp_C) / 2.0, 6),
+            "predicted_temp_field_xL_C": round(drivers.temp_C, 6),
         }
     if component is ComponentId.INSULATION:
         return {
@@ -157,6 +160,7 @@ def initial_state(scenario: str = "default", seed: int = 0) -> EngineState:
         components=components,
         coupling_matrix=[list(row) for row in COUPLING_MATRIX_M],
         rng_state=(int(seed), str(scenario)),
+        events=(),
     )
 
 
@@ -185,6 +189,7 @@ def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState:
         components=next_components,
         coupling_matrix=state.coupling_matrix,
         rng_state=state.rng_state,
+        events=(),
     )
 
 

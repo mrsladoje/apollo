@@ -505,7 +505,7 @@ If MPS training is unstable or the PINN diverges, swap in a scikit-learn `Gradie
 ```
 src/engine/conformal/
     __init__.py
-    wrapper.py         # MapieTimeSeriesRegressor wrapper per component
+    wrapper.py         # MAPIE TimeSeriesRegressor wrapper per component
     residuals.py       # Residual storage + block-bootstrap utilities
     coverage_eval.py   # Empirical-coverage validator on Stressed scenario
 data/
@@ -515,30 +515,32 @@ data/
 
 ### 9.2 Per-component wrapping
 
-For every `ComponentId`, build a `MapieTimeSeriesRegressor(estimator=ComponentPredictor(c), method="enbpi", agg_function="mean", n_resamplings=20)`, where `ComponentPredictor(c)` is a thin sklearn-compatible adapter that calls the component's `intrinsic_decay` (rule-based) or the PINN (heater) over a horizon.
+For every `ComponentId`, build a MAPIE 1.3 `TimeSeriesRegressor(estimator=ComponentPredictor(c), method="enbpi", agg_function="mean", cv=BlockBootstrap(n_resamplings=20, length=30, overlapping=False, random_state=0))`, where `ComponentPredictor(c)` is a thin sklearn-compatible adapter that calls the component's `intrinsic_decay` (rule-based) or the PINN (heater) over a horizon.
 
 Calibration data: take the **last 2 hours** of the Barcelona-humid scenario from Plan B's historian as the calibration set. Block bootstrap with block size 30 simulated minutes (handles the cascade-onset autocorrelation ADR-015 calls out).
 
 ```python
 # src/engine/conformal/wrapper.py
-from mapie.regression import MapieTimeSeriesRegressor
+from mapie.regression import TimeSeriesRegressor
 from mapie.subsample import BlockBootstrap
 
 class ConformalForecaster:
     def __init__(self, predictor, ci_level: float = 0.95):
-        self.mapie = MapieTimeSeriesRegressor(
+        self.mapie = TimeSeriesRegressor(
             estimator=predictor,
             method="enbpi",
             cv=BlockBootstrap(n_resamplings=20, length=30, overlapping=False, random_state=0),
+            agg_function="mean",
+            random_state=0,
         )
-        self.alpha = 1.0 - ci_level
+        self.ci_level = ci_level
 
     def fit(self, X_calib: np.ndarray, y_calib: np.ndarray) -> "ConformalForecaster":
         self.mapie.fit(X_calib, y_calib)
         return self
 
     def predict(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        y_pred, y_pis = self.mapie.predict(X, alpha=self.alpha)
+        y_pred, y_pis = self.mapie.predict(X, confidence_level=self.ci_level)
         return y_pred, y_pis[:, 0, 0], y_pis[:, 1, 0]   # point, lower, upper
 ```
 

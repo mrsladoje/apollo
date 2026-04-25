@@ -96,12 +96,34 @@ def _residuals_from(traj: np.ndarray, horizon: int, alpha: float) -> np.ndarray:
     return actual - predicted
 
 
+def _calibration_xy_from(traj: np.ndarray, horizons: tuple, alpha: float) -> tuple[np.ndarray, np.ndarray]:
+    """Build sklearn/MAPIE calibration rows.
+
+    X columns are `(current_health, horizon_min)`; y is the realised future
+    health. This is the persisted calibration set consumed by
+    `ConformalForecaster`'s MAPIE `TimeSeriesRegressor`.
+    """
+    X_rows: list[list[float]] = []
+    y_rows: list[float] = []
+    for horizon in horizons:
+        if horizon >= traj.size:
+            continue
+        for t in range(traj.size - horizon):
+            X_rows.append([float(traj[t]), float(horizon)])
+            y_rows.append(float(traj[t + horizon]))
+    return np.asarray(X_rows, dtype=np.float64), np.asarray(y_rows, dtype=np.float64)
+
+
 def _fit_alpha(traj: np.ndarray, *, calibration_window: int = 300) -> float:
     """Fit alpha as the mean per-minute decay rate over the calibration's
-    second-half (stressed) window. This anchors the point forecast to the
-    regime the band has to cover, leaving the residual quantile to absorb
-    the remaining variance per ADR-015.
+    active degradation portion of the trajectory. If a component has already
+    failed by the tail window, a tail-only slope is zero and would make every
+    horizon share the same point forecast; use the positive drops instead.
     """
+    drops = -(np.diff(traj))
+    active = drops[drops > 0.0]
+    if active.size:
+        return float(np.mean(active))
     if traj.size <= calibration_window:
         return float(max(0.0, (traj[0] - traj[-1]) / max(1, traj.size - 1)))
     tail = traj[-calibration_window:]
@@ -118,9 +140,12 @@ def calibrate_all(*, minutes: int = 600, seed: int = 7) -> Path:
     for cid in ROW_ORDER:
         traj = trajectories[cid]
         alpha = _fit_alpha(traj)
+        X_calib, y_calib = _calibration_xy_from(traj, CALIBRATION_HORIZONS, alpha)
         payload: Dict[str, np.ndarray] = {
             "horizons": np.asarray(CALIBRATION_HORIZONS, dtype=np.int64),
             "alpha": np.asarray([alpha], dtype=np.float64),
+            "X_calib": X_calib,
+            "y_calib": y_calib,
         }
         for h in CALIBRATION_HORIZONS:
             payload[f"residuals_{h}"] = _residuals_from(traj, h, alpha)

@@ -54,3 +54,12 @@ def test_apply_coupling_zero_when_all_healthy():
     intrinsic = np.zeros(6)
     out = apply_coupling(healths, intrinsic, dt=1.0)
     np.testing.assert_array_equal(out, healths)
+
+
+def test_apply_coupling_uses_literal_plan_formula():
+    """PLAN-A §7.2: dH = intrinsic_dH - (M @ (1-H)) * dt, with no hidden scale."""
+    healths = np.array([0.5, 1.0, 1.0, 1.0, 1.0, 1.0])
+    intrinsic = np.zeros(6)
+    out = apply_coupling(healths, intrinsic, dt=1.0)
+    motor_idx = ROW_ORDER.index(ComponentId.MOTOR)
+    assert out[motor_idx] == 0.8

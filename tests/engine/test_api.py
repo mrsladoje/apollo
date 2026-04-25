@@ -8,17 +8,31 @@ import numpy as np
 import pytest
 
 from engine import api
+from engine.components import HeatingElement, build_components
+from engine.components.heater import _SAMPLE_X
 from engine.contracts import (
     COUPLING_MATRIX_M,
     ComponentId,
     ComponentState,
     ComponentStatus,
+    EngineEvent,
+    EngineEventType,
     Drivers,
     EngineState,
     Forecast,
     ROW_ORDER,
     status_for_health,
 )
+
+
+class _SpyPINN:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def __call__(self, x: np.ndarray, t: float) -> np.ndarray:
+        self.calls.append((np.asarray(x).copy(), float(t)))
+        x_arr = np.asarray(x, dtype=np.float64)
+        return 25.0 + (200.0 - 25.0) * (1.0 - x_arr / x_arr[-1])
 
 
 def _drivers(seed: int = 42, hours: float = 0.0) -> Drivers:
@@ -111,6 +125,8 @@ def test_contracts_public_surface():
     expected = {
         "ComponentId",
         "ComponentStatus",
+        "EngineEventType",
+        "EngineEvent",
         "ROW_ORDER",
         "status_for_health",
         "COUPLING_MATRIX_M",
@@ -149,3 +165,58 @@ def test_step_keeps_health_in_unit_interval():
         for cid, comp in state.components.items():
             assert 0.0 <= comp.health <= 1.0
             assert comp.status == status_for_health(comp.health)
+
+
+def test_step_emits_domain_events_on_status_and_cascade_transition():
+    state = api.initial_state(seed=5)
+    blade = ComponentState(
+        component_id=ComponentId.BLADE,
+        health=0.71,
+        status=ComponentStatus.FUNCTIONAL,
+        metrics=state.components[ComponentId.BLADE].metrics,
+    )
+    state = EngineState(
+        components={**state.components, ComponentId.BLADE: blade},
+        coupling_matrix=state.coupling_matrix,
+        rng_state=state.rng_state,
+    )
+    drivers = Drivers(
+        temp_C=45.0,
+        humidity=0.75,
+        pm25=40.0,
+        psd_d50=50.0,
+        voltage_stability=0.6,
+        cycles=200,
+        hours=4.0,
+        maintenance_level={c: 1.0 for c in ComponentId},
+        operator_shift="weekend",
+        rng_seed=5,
+    )
+    next_state = api.step(state, drivers, dt=20.0)
+    assert all(isinstance(e, EngineEvent) for e in next_state.events)
+    assert any(
+        e.event_type is EngineEventType.COMPONENT_DEGRADED
+        and e.component_id is ComponentId.BLADE
+        for e in next_state.events
+    )
+    assert {
+        e.cascade_id for e in next_state.events
+        if e.event_type is EngineEventType.CASCADE_TRIGGERED
+    } >= {"CSC-A", "CSC-C"}
+
+
+def test_step_calls_heater_pinn_once(monkeypatch):
+    state = api.initial_state(seed=21)
+    spy = _SpyPINN()
+    registry = build_components()
+    registry[ComponentId.HEATER] = HeatingElement(pinn=spy)
+
+    monkeypatch.setattr(api, "_COMPONENT_CACHE", None)
+    monkeypatch.setattr(api, "_COMPONENT_CACHE_KEY", None)
+    monkeypatch.setattr(api, "build_components", lambda: registry)
+
+    api.step(state, _drivers(seed=21, hours=1.0), dt=1.0)
+
+    assert len(spy.calls) == 1
+    x, _ = spy.calls[0]
+    assert np.allclose(x, _SAMPLE_X)

@@ -4,8 +4,9 @@ Wraps the DeepXDE PINN (`engine.pinn.inference.HeaterPINN`) — the only
 neural model in the engine (ADR-001). The PINN predicts T(x, t) on a
 1-D rod; we sample three points (x0, xmid, xL) per step. The Coffin-Manson
 fatigue layer reads the predicted swing and accumulates damage.
-Drivers: temp_C, hours, voltage_stability. Metrics: temp_x0_C, temp_xmid_C,
-temp_xL_C, drift_pct.
+Drivers: temp_C, hours, voltage_stability. Metrics:
+predicted_temp_field_x0_C, predicted_temp_field_xmid_C,
+predicted_temp_field_xL_C, drift_pct.
 """
 
 from __future__ import annotations
@@ -57,6 +58,16 @@ class HeatingElement(Component):
         rng: np.random.Generator,
     ) -> float:
         field = self._temp_field(drivers)
+        return self.intrinsic_decay_from_field(state, drivers, dt, rng, field)
+
+    def intrinsic_decay_from_field(
+        self,
+        state: ComponentState,
+        drivers: Drivers,
+        dt: float,
+        rng: np.random.Generator,
+        field: np.ndarray,
+    ) -> float:
         delta_T = max(1.0, self._delta_T(field))
         instab = 1.0 - max(0.0, min(1.0, drivers.voltage_stability))
         cycles = self.duty_cycles_per_min * dt * (1.0 + 0.5 * instab)
@@ -79,12 +90,20 @@ class HeatingElement(Component):
         drivers: Drivers,
     ) -> Dict[str, float]:
         field = self._temp_field(drivers)
+        return self.emit_metrics_from_field(state, drivers, field)
+
+    def emit_metrics_from_field(
+        self,
+        state: ComponentState,
+        drivers: Drivers,
+        field: np.ndarray,
+    ) -> Dict[str, float]:
         # drift_pct grows with health loss and ambient deviation; bounded [0, 1].
         drift = max(0.0, min(1.0, (1.0 - state.health) * 0.5 + abs(drivers.temp_C - 25.0) / 200.0))
         return {
-            "temp_x0_C": float(field[0]),
-            "temp_xmid_C": float(field[1]),
-            "temp_xL_C": float(field[2]),
+            "predicted_temp_field_x0_C": float(field[0]),
+            "predicted_temp_field_xmid_C": float(field[1]),
+            "predicted_temp_field_xL_C": float(field[2]),
             "drift_pct": float(drift),
         }
 

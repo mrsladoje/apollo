@@ -116,7 +116,11 @@ def csc_b_inputs_from(
 ) -> Tuple[float, float, float]:
     """Convenience packer for `step()`: derive (swing_K, ambient_C, cycles)."""
     swing = float(np.max(pinn_temp_field) - np.min(pinn_temp_field))
-    return swing, float(drivers_temp_C), float(duty_cycles_per_min * dt)
+    # The printhead sees the heater-side field through the thermal loop, not
+    # just ambient drivers.temp_C. Blend ambient with the PINN mean so the
+    # nozzle Arrhenius path is actually driven by the PINN prediction.
+    enclosure = float(0.5 * drivers_temp_C + 0.5 * np.mean(pinn_temp_field))
+    return swing, enclosure, float(duty_cycles_per_min * dt)
 
 
 __all__ = [

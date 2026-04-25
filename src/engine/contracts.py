@@ -8,7 +8,7 @@ breaking changes require the §3 handshake.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +31,12 @@ class ComponentStatus(str, Enum):
     DEGRADED = "DEGRADED"      # 0.4 <= health < 0.7
     CRITICAL = "CRITICAL"      # 0.1 <= health < 0.4
     FAILED = "FAILED"          # health < 0.1
+
+
+class EngineEventType(str, Enum):
+    COMPONENT_DEGRADED = "ComponentDegraded"
+    COMPONENT_FAILED = "ComponentFailed"
+    CASCADE_TRIGGERED = "CascadeTriggered"
 
 
 # Row order for the 6x6 coupling matrix (PLAN-A §7.1).
@@ -88,6 +94,16 @@ class ComponentState(BaseModel):
     metrics: dict[str, float]
 
 
+class EngineEvent(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    event_type: EngineEventType
+    component_id: Optional[ComponentId] = None
+    cascade_id: Optional[Literal["CSC-A", "CSC-B", "CSC-C"]] = None
+    previous_status: Optional[ComponentStatus] = None
+    new_status: Optional[ComponentStatus] = None
+
+
 # ---------------------------------------------------------------------------
 # Driver vector (PRD §9.2, FR-1.2)
 # ---------------------------------------------------------------------------
@@ -117,6 +133,7 @@ class EngineState(BaseModel):
     components: dict[ComponentId, ComponentState]
     coupling_matrix: list[list[float]]  # 6x6, row order == ROW_ORDER
     rng_state: tuple                    # serialized np.random.Generator state
+    events: tuple[EngineEvent, ...] = Field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +154,8 @@ class Forecast(BaseModel):
 __all__ = [
     "ComponentId",
     "ComponentStatus",
+    "EngineEventType",
+    "EngineEvent",
     "ROW_ORDER",
     "status_for_health",
     "COUPLING_MATRIX_M",

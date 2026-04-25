@@ -8,7 +8,7 @@ import pytest
 
 from engine.api import forecast, initial_state, step
 from engine.contracts import ComponentId, Drivers, Forecast, ROW_ORDER
-from engine.conformal.wrapper import ConformalForecaster
+from engine.conformal.wrapper import ConformalForecaster, MapieTimeSeriesRegressor
 
 
 _DATA = Path(__file__).resolve().parents[3] / "data" / "conformal_residuals"
@@ -65,3 +65,8 @@ def test_conformal_residuals_persisted():
             f"missing residual file for {cid.value}; "
             "run `python3 -c 'from engine.conformal import calibrate_all; calibrate_all()'`."
         )
+
+
+def test_conformal_uses_mapie_time_series_regressor():
+    forecaster = ConformalForecaster(ComponentId.BLADE)
+    assert isinstance(forecaster._mapie, MapieTimeSeriesRegressor)

@@ -27,7 +27,5 @@ def test_pinn_inference_latency_under_5ms():
     for _ in range(n):
         pinn(x, 0.5)
     elapsed_ms = (time.perf_counter() - start) * 1000.0 / n
-    # NFR-3 budget: 5 ms / call on M3 Max CPU. We allow generous headroom
-    # for shared-runner CI nodes (§10.3 says we WARN off-M3-Max, but the
-    # local M3 Max numbers should land well inside 5 ms).
-    assert elapsed_ms < 50.0, f"PINN mean inference {elapsed_ms:.3f} ms"
+    # NFR-3 budget: 5 ms / call on M3 Max CPU.
+    assert elapsed_ms < 5.0, f"PINN mean inference {elapsed_ms:.3f} ms"
