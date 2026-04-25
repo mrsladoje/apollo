@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from engine.contracts import ComponentId, EngineState
 from datetime import datetime
 

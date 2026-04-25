@@ -1,105 +1,221 @@
-import random
-import statistics
+"""DEAP GA — PLAN-B §9 Workstream B5.
+
+Tunes the AIPolicy's 7-dim genome (6 per-component thresholds + 1 global
+lookahead coefficient) on the Stressed scenario, where the fitness landscape
+is most informative (ADR-011).
+
+Notes vs. earlier revision:
+- ``deap`` is imported lazily so importing this module on a machine without
+  the dep does not crash (R-7 / offline CI).
+- The fitness function now actually wires the genome into ``SimulationConfig``
+  (previous revision dropped the genome into ``config_json``, which the loop
+  ignored — every individual evaluated to the same default policy and the
+  fitness curve was flat).
+- Population[0] is the §9.3 hand-tuned seed individual so the curve is
+  monotone-ish from generation 1 (R-4 mitigation at the algorithm level).
+"""
+
+from __future__ import annotations
+
 import csv
 import os
-from deap import base, creator, tools, algorithms
+import random
+import statistics
+from typing import List
+
 from engine.contracts import ComponentId
 from sim.config import SimulationConfig
-from sim.loop import run_simulation
 from sim.historian.reader import compare_runs
+from sim.loop import run_simulation
 
-# Constants from PLAN-B §9.1 (Reduced for demo)
+
+# Constants — PLAN-B §9.1
 POP_SIZE = 50
 N_GEN = 50
+TOURNAMENT = 3
+ALPHA = 0.5
+SIGMA = 0.05
+MUT_PROB = 0.2
+CX_PROB = 0.5
 LAMBDA_COST = 1.5
 LAMBDA_FAILURE = 50.0
 
-# 1. DEAP Setup
-if "FitnessMax" not in creator.__dict__:
-    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-if "Individual" not in creator.__dict__:
-    creator.create("Individual", list, fitness=creator.FitnessMax)
+GA_TMP_DB = "data/ga_tmp.db"
+GA_FITNESS_CSV = "data/ga_fitness.csv"
+POLICIES_YAML = "config/policies.yaml"
 
-toolbox = base.Toolbox()
-toolbox.register("attr_float", random.uniform, 0.1, 0.9)
-toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=7)
-toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+# §9.3 hand-tuned seed individual: blade, motor, nozzle, resistor, heater, insulation, lookahead
+SEED_INDIVIDUAL: List[float] = [0.50, 0.55, 0.45, 0.50, 0.55, 0.40, 0.30]
 
-def fitness(individual):
-    """Fitness function as defined in §9.2."""
-    thresholds = {
-        ComponentId.BLADE: individual[0],
-        ComponentId.MOTOR: individual[1],
-        ComponentId.NOZZLE: individual[2],
-        ComponentId.RESISTOR: individual[3],
-        ComponentId.HEATER: individual[4],
-        ComponentId.INSULATION: individual[5]
-    }
-    lookahead = individual[6]
-    
+# Fixed gene order — used both to construct the AIPolicy thresholds dict and
+# to write back the winning policy.
+GENE_ORDER = (
+    ComponentId.BLADE,
+    ComponentId.MOTOR,
+    ComponentId.NOZZLE,
+    ComponentId.RESISTOR,
+    ComponentId.HEATER,
+    ComponentId.INSULATION,
+)
+
+
+def _individual_to_thresholds(individual) -> tuple[dict, float]:
+    thresholds = {GENE_ORDER[i]: float(individual[i]) for i in range(6)}
+    lookahead = float(individual[6])
+    return thresholds, lookahead
+
+
+def _evaluate(individual) -> tuple[float]:
+    """Run a stressed-scenario simulation under this individual's policy and
+    score it via uptime − λ_cost·maintenance − λ_failure·failures.
+    """
+    thresholds, lookahead = _individual_to_thresholds(individual)
+
     cfg = SimulationConfig(
         scenario_name="stressed",
         policy="ai",
         seed=42,
-        config_json={"thresholds": thresholds, "lookahead": lookahead},
-        historian_path="ga_tmp.db"
+        historian_path=GA_TMP_DB,
+        thresholds=thresholds,
+        lookahead_coef=lookahead,
+        # config_json is the NFR-8 reproducibility key; carry the genome so
+        # rerunning the same individual is byte-identical.
+        config_json={
+            "thresholds": {cid.value: thresholds[cid] for cid in GENE_ORDER},
+            "lookahead": lookahead,
+        },
     )
-    
-    # Run simulation
+
     run_id = run_simulation(cfg)
-    
-    # Compute metrics
-    metrics = compare_runs([run_id], "uptime_hours", db_path="ga_tmp.db")
+    metrics = compare_runs(
+        [run_id],
+        "uptime_hours",
+        db_path=GA_TMP_DB,
+    )
     uptime = metrics[run_id]
-    
-    maintenance_count = compare_runs([run_id], "maintenance_count", db_path="ga_tmp.db")[run_id]
-    catastrophic_failures = compare_runs([run_id], "failure_count", db_path="ga_tmp.db")[run_id]
-    return (uptime - LAMBDA_COST * maintenance_count - LAMBDA_FAILURE * catastrophic_failures,)
+    maint = compare_runs([run_id], "maintenance_count", db_path=GA_TMP_DB)[run_id]
+    fails = compare_runs([run_id], "failure_count", db_path=GA_TMP_DB)[run_id]
+    return (uptime - LAMBDA_COST * maint - LAMBDA_FAILURE * fails,)
 
-toolbox.register("evaluate", fitness)
-toolbox.register("mate", tools.cxBlend, alpha=0.5)
-toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.05, indpb=0.2)
-toolbox.register("select", tools.selTournament, tournsize=3)
 
-def run_ga():
-    """Main GA loop as defined in §9."""
-    pop = toolbox.population(n=POP_SIZE)
-    
-    # Log to CSV §9.4
-    csv_path = "data/ga_fitness.csv"
-    os.makedirs("data", exist_ok=True)
-    
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["generation", "best_fitness", "mean_fitness", "std_fitness"])
+def _build_toolbox():
+    from deap import base, creator, tools  # type: ignore
+
+    if "FitnessMax" not in creator.__dict__:
+        creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    if "Individual" not in creator.__dict__:
+        creator.create("Individual", list, fitness=creator.FitnessMax)
+
+    toolbox = base.Toolbox()
+    toolbox.register("attr_float", random.uniform, 0.1, 0.9)
+    toolbox.register(
+        "individual",
+        tools.initRepeat,
+        creator.Individual,
+        toolbox.attr_float,
+        n=7,
+    )
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("evaluate", _evaluate)
+    toolbox.register("mate", tools.cxBlend, alpha=ALPHA)
+    toolbox.register(
+        "mutate",
+        tools.mutGaussian,
+        mu=0,
+        sigma=SIGMA,
+        indpb=MUT_PROB,
+    )
+    toolbox.register("select", tools.selTournament, tournsize=TOURNAMENT)
+    return toolbox, creator
+
+
+def _seed_population(toolbox, creator, n: int):
+    """Population[0] is the §9.3 hand-tuned seed; the rest are random."""
+    pop = [creator.Individual(list(SEED_INDIVIDUAL))]
+    pop.extend(toolbox.population(n=n - 1))
+    return pop
+
+
+def _write_policies_yaml(
+    best_individual,
+    best_fitness: float,
+    gen: int,
+    path: str = POLICIES_YAML,
+) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write("# config/policies.yaml — generated by GA, do not hand-edit\n")
+        fh.write("ai_policy:\n")
+        fh.write("  thresholds:\n")
+        for i, cid in enumerate(GENE_ORDER):
+            fh.write(f"    {cid.value}: {best_individual[i]:.4f}\n")
+        fh.write(f"  lookahead_coef: {best_individual[6]:.4f}\n")
+        fh.write('  trained_on: "stressed-seed0042"\n')
+        fh.write(f"  ga_generation: {gen}\n")
+        fh.write(f"  best_fitness: {best_fitness:.4f}\n")
+
+
+def run_ga(seed: int = 42) -> tuple[list, float]:
+    """Main GA loop. Returns (best_individual, best_fitness).
+
+    Deterministic for a given seed: same seed → same final individual to 8
+    decimals (NFR-8 / §9.7 ``test_ga_determinism``).
+    """
+    from deap import algorithms, tools  # type: ignore
+
+    random.seed(seed)
+    toolbox, creator = _build_toolbox()
+
+    pop = _seed_population(toolbox, creator, POP_SIZE)
+
+    # Initial evaluation
+    fits = list(map(toolbox.evaluate, pop))
+    for ind, fit in zip(pop, fits):
+        ind.fitness.values = fit
+
+    os.makedirs(os.path.dirname(GA_FITNESS_CSV), exist_ok=True)
+    with open(GA_FITNESS_CSV, "w", newline="") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=[
+                "generation",
+                "best_fitness",
+                "mean_fitness",
+                "std_fitness",
+            ],
+        )
         writer.writeheader()
-        
+
         for gen in range(N_GEN):
-            offspring = algorithms.varAnd(pop, toolbox, cxpb=0.5, mutpb=0.2)
-            fits = toolbox.map(toolbox.evaluate, offspring)
+            offspring = algorithms.varAnd(pop, toolbox, cxpb=CX_PROB, mutpb=MUT_PROB)
+            # Clamp genes to [0, 1] after mutation (mutGaussian can drift out).
+            for ind in offspring:
+                for i in range(len(ind)):
+                    ind[i] = max(0.0, min(1.0, ind[i]))
+            fits = list(map(toolbox.evaluate, offspring))
             for ind, fit in zip(offspring, fits):
                 ind.fitness.values = fit
             pop = toolbox.select(offspring, k=len(pop))
-            
-            # Logging
-            fitnesses = [ind.fitness.values[0] for ind in pop]
-            writer.writerow({
-                "generation": gen,
-                "best_fitness": max(fitnesses),
-                "mean_fitness": statistics.mean(fitnesses),
-                "std_fitness": statistics.stdev(fitnesses) if len(fitnesses) > 1 else 0.0
-            })
-            print(f"Gen {gen}: Best = {max(fitnesses):.4f}")
 
-    # Save final winner to config/policies.yaml §9.5
-    best_ind = tools.selBest(pop, 1)[0]
-    os.makedirs("config", exist_ok=True)
-    with open("config/policies.yaml", "w") as f:
-        f.write("# Generated by GA\n")
-        f.write("ai_policy:\n")
-        f.write("  thresholds:\n")
-        for i, cid in enumerate([ComponentId.BLADE, ComponentId.MOTOR, ComponentId.NOZZLE, ComponentId.RESISTOR, ComponentId.HEATER, ComponentId.INSULATION]):
-            f.write(f"    {cid.value}: {best_ind[i]:.4f}\n")
-        f.write(f"  lookahead_coef: {best_ind[6]:.4f}\n")
+            scores = [ind.fitness.values[0] for ind in pop]
+            writer.writerow(
+                {
+                    "generation": gen,
+                    "best_fitness": max(scores),
+                    "mean_fitness": statistics.mean(scores),
+                    "std_fitness": (
+                        statistics.stdev(scores) if len(scores) > 1 else 0.0
+                    ),
+                }
+            )
+            fh.flush()
 
-if __name__ == "__main__":
+    best = tools.selBest(pop, 1)[0]
+    # Pass POLICIES_YAML explicitly so monkeypatched values during testing
+    # are honored (default args are bound at function-definition time).
+    _write_policies_yaml(best, best.fitness.values[0], N_GEN, path=POLICIES_YAML)
+    return list(best), float(best.fitness.values[0])
+
+
+if __name__ == "__main__":  # pragma: no cover
     run_ga()

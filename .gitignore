@@ -34,3 +34,9 @@ build/
 *.sqlite
 *.sqlite3
 *.db
+
+# Coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

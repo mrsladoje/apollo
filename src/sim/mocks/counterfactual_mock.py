@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from sim.contracts import CounterfactualResult
 from .historian_mock import query_historian

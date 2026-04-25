@@ -1,44 +1,66 @@
-import sqlite3
-import os
-from datetime import datetime
-from pylate import indexes, models
+"""PyLate / PLAID index builder — PLAN-B §12.1.
 
-def build_index(historian_path: str = "historian.db", index_path: str = "data/lateon.index"):
-    """Build the ColBERT retrieval index as defined in §12.1."""
-    
-    # 1. Setup model and index
-    model = models.ColBERT("lightonai/lateon-code-edge")
+Lazy-imports ``pylate`` so machines without the heavy dep can still load
+the rest of the package (R-7 / offline CI). Snippet construction is shared
+with the dense fallback via ``_snippets.stream_snippets`` so the corpus
+matches across backends.
+
+Run as a script:
+
+    python -m sim.retrieval.indexer --historian historian.db --out data/lateon.index
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from typing import Iterable, List
+
+from ._snippets import HistorianSnippet, stream_snippets
+
+DEFAULT_INDEX_PATH = "data/lateon.index"
+DEFAULT_MODEL = "lightonai/lateon-code-edge"
+
+
+def build_index(
+    historian_path: str = "historian.db",
+    index_path: str = DEFAULT_INDEX_PATH,
+    model_name: str = DEFAULT_MODEL,
+) -> int:
+    """Build the late-interaction index. Returns the number of indexed docs.
+
+    Per ADR-010 the corpus stays small (<= 12k rows for the demo) so a single
+    encode+add pass is cheap. Re-running with ``override=True`` rewrites the
+    folder so this is the canonical "rebuild the demo index" entry point.
+    """
+    from pylate import indexes, models  # type: ignore  # heavy, lazy
+
+    os.makedirs(os.path.dirname(index_path) or ".", exist_ok=True)
+
+    model = models.ColBERT(model_name)
     index = indexes.PLAID(index_folder=index_path, override=True)
-    
-    # 2. Extract rows from historian
-    conn = sqlite3.connect(historian_path)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("""
-        SELECT run_id, component_id, t, health, status, metrics_json 
-        FROM component_states
-    """).fetchall()
-    
-    docs, doc_ids = [], []
-    for row in rows:
-        doc_id = f"{row['run_id']}|{row['component_id']}|{row['t']}"
-        
-        # Build token-dense snippet §12.2
-        snippet = (
-            f"[run={row['run_id']}] [component={row['component_id']}] [t={row['t']}] "
-            f"[status={row['status']}] [health={row['health']:.2f}] "
-            f"metrics={row['metrics_json']}"
-        )
-        
-        docs.append(snippet)
-        doc_ids.append(doc_id)
-        
-    # 3. Encode and Index
-    print(f"Indexing {len(docs)} documents...")
+
+    snippets: List[HistorianSnippet] = list(stream_snippets(historian_path))
+    if not snippets:
+        return 0
+
+    docs = [s.text for s in snippets]
+    doc_ids = [s.doc_id for s in snippets]
+
     embeddings = model.encode(docs, is_query=False)
     index.add_documents(documents_ids=doc_ids, documents_embeddings=embeddings)
-    
-    print(f"Index built successfully at {index_path}")
-    conn.close()
+    return len(snippets)
 
-if __name__ == "__main__":
-    build_index()
+
+def _cli() -> None:  # pragma: no cover
+    p = argparse.ArgumentParser(description="Build the LateOn-Code-edge index.")
+    p.add_argument("--historian", default="historian.db")
+    p.add_argument("--out", default=DEFAULT_INDEX_PATH)
+    p.add_argument("--model", default=DEFAULT_MODEL)
+    args = p.parse_args()
+    n = build_index(args.historian, args.out, args.model)
+    print(f"Indexed {n} documents into {args.out}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    _cli()

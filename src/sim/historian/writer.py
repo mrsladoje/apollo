@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime, timedelta
 from engine.contracts import EngineState, Drivers, ComponentId, Forecast

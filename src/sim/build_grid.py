@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from sim.config import SimulationConfig
 from sim.loop import run_simulation

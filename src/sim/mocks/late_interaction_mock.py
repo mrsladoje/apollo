@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from engine.contracts import ComponentId
 from sim.contracts import RetrievedRow
