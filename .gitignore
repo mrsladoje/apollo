@@ -1,6 +1,7 @@
 # Claude Code / RuFlo runtime — local only
 .claude/
 .claude-flow/
+.mcp.json
 
 # macOS
 .DS_Store
