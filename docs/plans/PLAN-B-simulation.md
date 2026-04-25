@@ -71,13 +71,21 @@ These signatures are **frozen at hour zero**. Plan A and Plan C build against th
 ### 3.1 Inbound — what Plan A publishes
 
 ```python
-# engine/contracts.py — Plan A owns this file
-from datetime import datetime
+# engine/contracts.py — Plan A owns this file. Authoritative source is
+# PLAN-A-engine.md §3 and master PLAN.md §3.1. Plan B IMPORTS — it does not
+# redeclare. The signatures below are reproduced here for reading convenience
+# only; if this block ever drifts from PLAN-A-engine.md §3, PLAN-A wins.
 from enum import Enum
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
-ComponentId = Literal["blade", "motor", "nozzle", "resistor", "heater", "insulation"]
+class ComponentId(str, Enum):
+    BLADE      = "blade"
+    MOTOR      = "motor"
+    NOZZLE     = "nozzle"
+    RESISTOR   = "resistor"
+    HEATER     = "heater"
+    INSULATION = "insulation"
 
 class ComponentStatus(str, Enum):
     FUNCTIONAL = "FUNCTIONAL"
@@ -86,35 +94,46 @@ class ComponentStatus(str, Enum):
     FAILED     = "FAILED"
 
 class ComponentState(BaseModel):
+    model_config = ConfigDict(frozen=True)
     component_id: ComponentId
-    health: float                # [0, 1]
+    health: float = Field(ge=0.0, le=1.0)
     status: ComponentStatus
-    metrics: dict                # component-specific scalar metrics
+    metrics: dict[str, float]    # component-specific (blade_thickness_mm, current_draw_A, …)
 
 class Drivers(BaseModel):
-    t: datetime
+    model_config = ConfigDict(frozen=True)
     temp_C: float
-    humidity: float
-    pm25: float
-    psd_d50: float
-    voltage_stability: float
+    humidity: float              # 0..1 relative humidity
+    pm25: float                  # ug/m^3
+    psd_d50: float               # micrometers
+    voltage_stability: float     # 0..1
+    cycles: int                  # cumulative print cycles
+    hours: float                 # cumulative operating hours
+    maintenance_level: dict[ComponentId, float]
     operator_shift: Literal["day", "night", "weekend"]
+    rng_seed: int
 
 class EngineState(BaseModel):
+    model_config = ConfigDict(frozen=True)
     components: dict[ComponentId, ComponentState]
-    rng_state: bytes             # serialized numpy.random.Generator state (NFR-8, ADR-012)
-    accumulated_load: dict       # cycles, hours, etc.
+    coupling_matrix: list[list[float]]   # 6x6, ADR-004
+    rng_state: tuple                     # serialized np.random.Generator state (NFR-8, ADR-012)
 
 class Forecast(BaseModel):
-    horizon_min: int
+    model_config = ConfigDict(frozen=True)
+    component_id: ComponentId
+    horizon_min: int             # 1..60 (cap per ADR-015)
     point: float
     lower: float
     upper: float
-    ci_level: float = 0.95
+    ci_level: float              # nominal coverage, default 0.95
 
 def step(state: EngineState, drivers: Drivers, dt: float) -> EngineState: ...
-def forecast(state: EngineState, horizon_min: int) -> dict[ComponentId, Forecast]: ...
+def forecast(state: EngineState, horizon_min: int = 60) -> list[Forecast]: ...
+def initial_state(scenario: str = "default", seed: int = 0) -> EngineState: ...
 ```
+
+**Note on the timestamp `t`.** Plan A's `Drivers` does *not* carry `t` — the simulation loop owns the wall-clock cursor. Plan B's writer threads `t` into `drivers` row writes itself (see §7.1 `writer.write_drivers(run_id, t, drivers)`). Do not bake `t` into `Drivers`; that would invalidate Plan A's purity guarantee for `step()`.
 
 Plan A also ships `engine/mock_engine.py` at hour 0 — a stub `step()` that decays health linearly per component and returns valid `EngineState`. This unblocks B from minute one.
 

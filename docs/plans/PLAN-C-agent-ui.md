@@ -79,12 +79,11 @@ Plans A and B consume these schemas at integration time only. Until then, Plan C
 ### 3.1 Inbound contracts (consumed by Plan C)
 
 ```python
-# From Plan A (engine.contracts)
+# From Plan A (engine.contracts) — see PLAN.md §3.1 for the full source.
 from engine.contracts import ComponentId, ComponentStatus, Forecast
-# ComponentId: Literal["recoater_blade", "drive_motor", "nozzle_plate",
-#                      "thermal_resistors", "heating_element", "insulation_panel"]
-# ComponentStatus: Literal["FUNCTIONAL", "DEGRADED", "CRITICAL", "FAILED"]
-# Forecast(point: float, lower: float, upper: float, ci_level: float, horizon_min: int)
+# ComponentId: str-Enum with values {"blade","motor","nozzle","resistor","heater","insulation"}
+# ComponentStatus: str-Enum {"FUNCTIONAL","DEGRADED","CRITICAL","FAILED"}
+# Forecast(component_id, horizon_min, point, lower, upper, ci_level)
 
 # From Plan B (sim.contracts)
 from sim.contracts import (
@@ -105,22 +104,19 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
-CANONICAL_COMPONENTS = {
-    "recoater_blade", "drive_motor", "nozzle_plate",
-    "thermal_resistors", "heating_element", "insulation_panel",
-}  # mirrors engine.contracts.ComponentId at import time (ADR-014, ADR-002)
+# CANONICAL_COMPONENTS is computed from engine.contracts.ComponentId at import
+# time — see PLAN.md §3.4 ("the only allowed source of component names"). Any
+# string-name copy of these IDs is a bug.
+from engine.contracts import ComponentId
+CANONICAL_COMPONENTS = {c.value for c in ComponentId}
+# Resolves to: {"blade", "motor", "nozzle", "resistor", "heater", "insulation"}
 
 class Citation(BaseModel):
     run_id: str
-    component: str   # validated against CANONICAL_COMPONENTS
+    component: ComponentId   # typed against the enum, not a free string (ADR-014)
     timestamp: datetime
-
-    @field_validator("component")
-    @classmethod
-    def _component_in_enum(cls, v: str) -> str:
-        if v not in CANONICAL_COMPONENTS:
-            raise ValueError(f"unknown component {v!r}")
-        return v
+    # Pydantic enforces enum membership; resolution against the historian PK
+    # happens in resolve_citation() before the SSE 'done' event fires (§7).
     # NOTE: PK resolution against historian happens in resolve_citation()
     # before the SSE 'done' event fires. See §7.
 
@@ -397,13 +393,14 @@ Six template-bounded utterance generators in `src/apollo/agent/speak.py`. Each c
 # src/apollo/agent/speak.py
 from engine.contracts import ComponentId, ComponentState
 
+# Keys are exactly the short ComponentId enum values from Plan A — see PLAN.md §3.4.
 TEMPLATES = {
-  "recoater_blade":   "My blade is {thickness:.2f} mm thick — {delta} mm below spec.",
-  "drive_motor":      "My bearing is at {temp:.0f} °C; that's {band} my comfort band.",
-  "nozzle_plate":     "My clog probability is {prob:.0%}; {n_active} of 1024 nozzles are firing.",
-  "thermal_resistors":"My resistance is {pct:.1f}% of nominal after {cycles} thermal cycles.",
-  "heating_element":  "My predicted temperature drift is {drift:.1f}% — PINN says I'm within physics bounds.",
-  "insulation_panel": "My k_eff is {keff:.3f} W/m·K; insulation has lost {loss:.0%} of nominal performance.",
+  "blade":      "My blade is {thickness:.2f} mm thick — {delta} mm below spec.",
+  "motor":      "My bearing is at {temp:.0f} °C; that's {band} my comfort band.",
+  "nozzle":     "My clog probability is {prob:.0%}; {n_active} of 1024 nozzles are firing.",
+  "resistor":   "My resistance is {pct:.1f}% of nominal after {cycles} thermal cycles.",
+  "heater":     "My predicted temperature drift is {drift:.1f}% — PINN says I'm within physics bounds.",
+  "insulation": "My k_eff is {keff:.3f} W/m·K; insulation has lost {loss:.0%} of nominal performance.",
 }
 
 def speak(state: ComponentState) -> str:
