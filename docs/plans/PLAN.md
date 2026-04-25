@@ -420,7 +420,115 @@ Legend: ● primary owner ○ secondary consumer.
 
 ---
 
-## 9. Risk register (cross-cutting)
+## 9. DDD compliance (master)
+
+### 9.1 Authoritative ADR
+
+The binding source for the project's Domain-Driven Design structure is [`ADR-021 — DDD module structure with three bounded contexts`](../adr/ADR-021-domain-driven-design-module-structure.md). This section is a **quick reference**, not a redefinition: every claim below is restated from ADR-021 in the local context of this master plan. If this section drifts from ADR-021, ADR-021 wins. Adding to or modifying any of the structures in §9.2–§9.8 requires a new ADR superseding ADR-021 (per `docs/adr/README.md`); no in-place edits.
+
+### 9.2 Bounded contexts
+
+Three bounded contexts, one per phase, one per developer, one `contracts.py` published-language module each (per ADR-021 "Decision" §1).
+
+| Context | Owner (Plan) | Directory | Responsibility | Local ubiquitous language |
+| --- | --- | --- | --- | --- |
+| **Engine** | Plan A | `src/engine/` | Component physics, failure models, coupling matrix, cascades, PINN, conformal forecasting | Component, Subsystem, Cascade, Health, Status, Driver, Forecast |
+| **Simulation & History** | Plan B | `src/sim/` | Tick-driven simulation loop, historian (SQLite WAL), scenario+policy grid, GA optimizer, counterfactual replay, obituaries, retrieval index | Run, Scenario, Policy, Tick, Obituary, Counterfactual, Dark Twin, Retrieval |
+| **Agent & Presentation** | Plan C | `src/agent/` + `frontend/` | Claude Agent SDK loop, five typed tools, Pydantic citation pipeline, refusal templates, SSE wire format, Langfuse traces, React UI | Tool Call, Citation, Refusal, Severity, Trace, Persona |
+
+### 9.3 Context map
+
+Integration relationships use DDD pattern names from ADR-021 "Decision" §3. The §3 frozen contracts are the integration medium; ADR-014 supplies the ACL implementation.
+
+- **Engine → Simulation: Customer/Supplier** (Engine = Supplier). Simulation calls `engine.step()` and `engine.forecast()` through the published-language Pydantic contract in `src/engine/contracts.py` (this plan's §3.1).
+- **Simulation → Agent: Customer/Supplier** (Simulation = Supplier). Agent consumes the four function tools through `src/sim/contracts.py` (this plan's §3.2). Plan C wraps them in Claude Agent SDK tool definitions.
+- **Agent → User (frontend): Open Host Service**. `ApolloResponse` and the `SSEEvent` union are the published language consumed by the React frontend and the eval CI (this plan's §3.3).
+- **Agent ↔ Historian: Anti-Corruption Layer**. The Pydantic citation validator (ADR-014) is the only legitimate channel from historian state into user-facing prose. Every outbound citation must resolve against the historian by primary key `(run_id, t, component_id)` before crossing the boundary; unresolvable citations downgrade the response to `severity == "REFUSAL"` per ADR-014 / NFR-6 / NFR-7.
+
+### 9.4 Shared Kernel
+
+The shared kernel is **intentionally minimal** (per ADR-021 "Decision" §2): only the `ComponentId` enum and the small set of cross-context value objects co-located in `src/engine/contracts.py` (`ComponentStatus`, the `status_for_health` helper, and the component-field type used by `Citation`). Every other domain term lives inside its owning context.
+
+The kernel is **closed by default**. Adding a symbol to `src/engine/contracts.py` requires the §3 / §2.4 3-way handshake: all three developers sign off, the change rides a new ADR, the contract version bumps. This is friction by design; contract drift in the kernel would invalidate the architecture test in §9.9 and the schema enforcement in ADR-014.
+
+### 9.5 Aggregate roots
+
+Each bounded context owns exactly one aggregate root. Invariants are enforced by the aggregate, not by free functions outside it (per ADR-021 "Decision" §4).
+
+| Aggregate | Owning context | Invariants |
+| --- | --- | --- |
+| `EngineState` | Engine (Plan A) | All cascade transitions go through the aggregate via `step()`; per-component health stays in `[0, 1]`; status enum derives deterministically from `health` via `status_for_health`; coupling matrix `M` retains its ADR-004 sparsity pattern; `rng_state` is serializable (NFR-1, ADR-012). |
+| `Run` | Simulation (Plan B) | Append-only timeline of `HistorianRow`s keyed by `(run_id, t, component_id)`; counterfactuals branch via deepcopy (ADR-012), never by editing past rows; same `(scenario, policy, seed, config_json)` ⇒ byte-identical historian (NFR-8, FR-2.7). |
+| `ApolloResponse` | Agent (Plan C) | `len(citations) ≥ 1` unless `severity == "REFUSAL"` (NFR-6, NFR-7, ADR-014); every `Citation` resolves against the historian primary key before the SSE `done` event fires; `tool` membership is closed under the `Literal` of five names; `severity` is closed under `INFO | WARNING | CRITICAL | REFUSAL`. |
+
+### 9.6 Ubiquitous language glossary
+
+Every term traces to a PRD section or an ADR. No new vocabulary; no synonyms.
+
+| Term | Definition |
+| --- | --- |
+| **Component** | One of six named hardware units modeled by Plan A: blade, motor, nozzle, resistor, heater, insulation. PRD §8; ADR-002. |
+| **Subsystem** | One of three groupings (Recoating, Printhead, Thermal); each contains exactly two components. PRD §6.1 FR-1.1; ADR-002. |
+| **Cascade** | A coupling-driven failure path between components. CSC-A (recoating), CSC-B (thermal-printhead, showpiece), CSC-C (powder contamination). PRD §10; ADR-003, ADR-004. |
+| **Health** | Per-component continuous scalar in `[0, 1]`; 1.0 = nominal, 0 = failed. PRD §8; FR-1.4. |
+| **Status** | Discrete enum derived from health: FUNCTIONAL ≥ 0.7, DEGRADED ≥ 0.4, CRITICAL ≥ 0.1, FAILED otherwise. PRD §8. |
+| **Driver** | An exogenous input to `step()`: temperature, humidity, PM2.5, powder PSD, voltage stability, cycles, hours, maintenance level, operator shift. PRD §9; FR-1.2. |
+| **Run** | A single `(scenario, policy, seed)` simulation traced into the historian. `run_id = "{scenario}-{policy}-seed{seed:04d}"`. PRD §6.2; FR-2.4. |
+| **Scenario** | One of three named driver-trajectory presets: Barcelona-humid, Phoenix-dry, Stressed. PRD §9.3; ADR-013. |
+| **Policy** | One of three maintenance strategies: NONE (Dark Twin), FIXED (calendar), AI (GA-tuned thresholds). PRD §6.2 FR-2.4; ADR-011, ADR-013. |
+| **Tick** | One simulated time-step (default 1 minute) at which `engine.step()` is invoked exactly once. PRD §6.2 FR-2.1. |
+| **Forecast** | A horizon-bounded `(point, lower, upper, ci_level)` triple from MAPIE conformal prediction; `horizon_min ≤ 60`. PRD §6.4 FR-W.6, §11.6; ADR-015. |
+| **Citation** | An evidence triple `(run_id, component, timestamp)` resolving to a real historian row. PRD §6.3 FR-3.3; ADR-014. |
+| **Refusal** | A structured response with `severity == "REFUSAL"`, empty citations, and a templated explanatory text emitted when the historian cannot ground a claim. PRD §6.3 FR-3.5; ADR-014. |
+| **Severity** | Closed enum `INFO | WARNING | CRITICAL | REFUSAL` on every Apollo response. PRD §6.3 FR-3.4. |
+| **Tool Call** | A typed Pydantic-validated invocation of one of five registered tools (PRD §6.3 FR-3.6) by the agent loop. ADR-008, ADR-009. |
+| **Trace** | A Langfuse-recorded span tree for one agent invocation, deep-linked from the `done` SSE event payload. PRD §6.4 FR-W.7; ADR-016. |
+| **Obituary** | A bounded-template post-mortem narrative auto-generated within 5 s of a component's transition to FAILED, every claim cited. PRD §6.4 FR-W.4; ADR-019. |
+| **Counterfactual** | A simulator-checkpoint replay branching from `(run_id, branch_t)` under an alternate action, returning a `(original, alternate, diff)` triple. PRD §11.4; ADR-012. |
+| **Dark Twin** | The user-facing label for the NONE policy column in the three-universe panel; demo framing only, the database `policy` value remains `"none"`. PRD §6.4 FR-W.2; ADR-013. |
+| **Persona** | Apollo's first-person voice: calm, professional, never alarmist, no exclamation marks; system prompt < 200 tokens. PRD §6.4 FR-W.1; ADR-019. |
+| **Conformal Interval** | The shaded `(lower, upper)` band at a stated `ci_level` produced by MAPIE EnbPi block-bootstrap; empirical coverage validated ≥ 0.90 on Stressed at 95 % nominal. PRD §11.6 FR-W.6, §16.2; ADR-015. |
+
+### 9.7 Domain events crossing contexts
+
+Cross-context state transitions are explicit, named, and Pydantic-typed (per ADR-021 "Decision" §5). Each event has a single emitter and one or more consumers.
+
+- `ComponentDegraded` — Engine emits → Simulation consumes (drives obituary candidacy, attribution).
+- `ComponentFailed` — Engine emits → Simulation consumes (triggers obituary generation per FR-W.4) → Agent / UI consume (failure markers in live-sim panel).
+- `CascadeTriggered` — Engine emits → Simulation consumes (logs cascade name CSC-A/B/C in obituary attribution).
+- `RunCompleted` — Simulation emits → Agent / UI consume (run becomes queryable in `compare_runs`, `late_interaction_search`).
+- `ObituaryEmitted` — Simulation emits → Agent / UI consume (failure-timeline card pops in within 1 s).
+- `CitationResolved` — Agent emits → eval / Langfuse consume (success path; ADR-016, ADR-018).
+- `ResponseRefused` — Agent emits → eval / Langfuse consume (refusal path is a positive signal per ADR-014).
+
+### 9.8 Anti-corruption rules
+
+Three rules protect the bounded contexts from each other (per ADR-021 "Decision" §6 "Ubiquitous-language enforcement rules"):
+
+1. **String component names are forbidden outside the `ComponentId` enum.** Only enum members are allowed in code, contracts, and persisted data. Enforced by `tests/architecture/test_no_string_components.py`, which greps `src/` for string literals matching component names and fails CI if any are found outside the enum definition itself or test fixtures. This is the structural protection of §3.4 of this plan.
+2. **The citation validator is the only legitimate channel from Historian state to user-facing prose.** No agent-context concept (e.g. raw "tool call result", free-form text drawn from training memory) leaks into the rendered response without ACL transit. ADR-014 and §7 of `PLAN-C-agent-ui.md` define the three-layer pipeline.
+3. **Import direction is one-way: Agent imports Sim imports Engine; never reversed.** A reverse import is both a circular-import bug and a DDD violation. The architecture test asserts the directed import graph; CI fails on any back-edge.
+
+### 9.9 Verification
+
+Three commands collectively enforce the structure above:
+
+```bash
+# Bounded-context boundary + string-component drift gate
+pytest tests/architecture/
+
+# Anti-corruption layer (citation validator) — adversarial fabricated-citation tests
+pytest tests/agent/test_citations.py
+
+# Aggregate invariant: byte-identical Run reconstruction (ADR-012, NFR-8)
+pytest tests/sim/test_reproducibility.py tests/engine/test_determinism_golden.py
+```
+
+`pytest tests/architecture/` validates §9.4 (kernel closure), §9.8 rule 1 (no string component names), and §9.8 rule 3 (import direction). `pytest tests/agent/test_citations.py` validates §9.8 rule 2 (ACL adversarial set already specified in §7.4 of this plan). The determinism gates validate §9.5 invariants for `EngineState` and `Run`.
+
+---
+
+## 10. Risk register (cross-cutting)
 
 These are PRD §19 risks elevated to plan-level mitigations. Mitigations are scheduled, not optional.
 
@@ -437,7 +545,7 @@ These are PRD §19 risks elevated to plan-level mitigations. Mitigations are sch
 
 ---
 
-## 10. Repo layout (target)
+## 11. Repo layout (target)
 
 ```
 printer_newnow/
@@ -501,7 +609,7 @@ This layout is binding for hour 0; the contracts files are the first commits.
 
 ---
 
-## 11. Definition of done (master)
+## 12. Definition of done (master)
 
 The project is done when:
 
@@ -522,7 +630,7 @@ The project is done when:
 
 ---
 
-## 12. References
+## 13. References
 
 - PRD: [`docs/PRD.md`](../PRD.md) — sections cited inline.
 - ADRs: [`docs/adr/`](../adr/) — 20 records, all `Status: Accepted`.

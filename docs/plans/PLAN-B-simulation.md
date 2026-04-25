@@ -1185,3 +1185,96 @@ Plan B is **done** when:
 - [ ] Every Dark Twin run has at least one obituary, every obituary has resolvable citations, and every narrative passes voice lint per ADR-019.
 
 This plan is binding. Developer B owns every line above. No deferrals.
+
+---
+
+## 17. DDD compliance
+
+### 17.1 Authoritative ADR
+
+The binding source for the bounded-context structure of Plan B's work is [`ADR-021 — DDD module structure with three bounded contexts`](../adr/ADR-021-domain-driven-design-module-structure.md). This section is a quick reference, not a redefinition: every claim below restates ADR-021 in the local context of the Simulation & History bounded context. If this section drifts from ADR-021, ADR-021 wins; deviation requires a new superseding ADR, not an in-place edit.
+
+### 17.2 Bounded context owned
+
+- **Name:** Simulation & History.
+- **Directory:** `src/sim/`.
+- **Responsibility:** The Clock + the Memory. Tick-driven simulation loop calling `engine.step()`, the SQLite WAL historian (the only repository surface in the system), the 3×3 scenario-policy grid, the DEAP genetic algorithm tuning the AI policy, the simulator-checkpoint counterfactual replay engine, the failure-attribution + obituary generator, and the PyLate late-interaction retrieval index.
+- **Local ubiquitous language (per ADR-021):** Run, Scenario, Policy, Tick, Obituary, Counterfactual, Dark Twin, Retrieval. Plan B does not introduce vocabulary outside this list; Component / Driver / Forecast are imported from the Engine context's published language.
+- **Published language:** `src/sim/contracts.py` — the four function tools Plan C wraps (`query_historian`, `compare_runs`, `run_counterfactual`, `late_interaction_search`) and their typed return models (`HistorianRow`, `CounterfactualResult`, `RetrievedRow`). See §3.2.
+
+### 17.3 Aggregate roots
+
+Plan B owns exactly one aggregate root.
+
+| Aggregate | Pydantic embodiment | Invariants enforced by the aggregate |
+| --- | --- | --- |
+| `Run` | The `runs` table row keyed by `run_id`, with its append-only timeline of `HistorianRow`s in `component_states` and `drivers`, plus its `obituaries`, `forecasts`, `maintenance_events`, and `checkpoints` (§5.1, §10.2). | `Run` is **append-only** — counterfactuals branch via `EngineState.model_copy(deep=True)` at the checkpoint (ADR-012), they never edit past rows. `run_id = "{scenario}-{policy}-seed{seed:04d}"` is stable; rerunning the same key under a transaction deletes-then-rewrites all child rows so byte-identical reproducibility (FR-2.7, NFR-8) holds. Every obituary's citations resolve to live rows in the same `Run` (asserted by `test_citations_resolvable.py`). The `policy` column stores the canonical value `"none" / "fixed" / "ai"`; the user-facing "Dark Twin" label lives only in Plan C copy. |
+
+`HistorianRow` is the unit of persistence inside the aggregate — a value object (§17.4), not a separate aggregate.
+
+### 17.4 Entities vs. value objects
+
+Classification of every Pydantic model in `src/sim/contracts.py` and its persistence siblings (the §3 frozen contracts of this plan):
+
+| Pydantic model | Classification | Reason |
+| --- | --- | --- |
+| `HistorianRow` | Value Object | Identified by composite key `(run_id, t, component_id)`, but immutable — once written, never updated; replaced wholesale on rerun. No identity beyond the key tuple. |
+| `CounterfactualResult` | Value Object | Returned-once result; carries `(original, alternate, diff)`, never mutated. |
+| `RetrievedRow` | Value Object | Snapshot ranking result with score + snippet; no lifecycle. |
+| `Checkpoint` (§10.1) | Value Object | Frozen snapshot of `EngineState` at `(run_id, t)`; reconstructable from history, never edited. |
+| `ObituaryRecord` | Value Object | Append-once template-bounded narrative + `citations_json`; never updated after insert. |
+| `SimulationConfig` (§3.3) | Value Object | Immutable run configuration; `(scenario, policy, seed, config_json)` is the NFR-8 reproducibility key. |
+| `Run` (the aggregate as a whole, manifested across `runs` + `component_states` + `drivers` + `maintenance_events` + `obituaries` + `forecasts` + `checkpoints`) | **Aggregate Root** | The only entity with through-time identity (`run_id`); owns the append-only invariant. |
+
+### 17.5 Domain services
+
+Stateless service functions that orchestrate the `Run` aggregate. The first four are the §3.2 published language consumed by Plan C; the remainder are internal.
+
+- `query_historian(run_id, component, time_range) -> list[HistorianRow]` — read-only projection over the aggregate. FR-3.6 tool 1.
+- `compare_runs(run_ids, metric) -> dict` — cross-aggregate aggregation for `metric ∈ {uptime_hours, failure_count, maintenance_count, avg_health}`. FR-3.6 tool 3.
+- `run_counterfactual(run_id, branch_t, alternate_action) -> CounterfactualResult` — checkpoint-load + branched replay (ADR-012); returns `(original, alternate, diff)` without mutating the original `Run`. FR-3.6 tool 4.
+- `late_interaction_search(query, run_id, top_k) -> list[RetrievedRow]` — PLAID index lookup over historian-derived snippets (ADR-010). FR-3.6 tool 2.
+- `run_simulation(cfg) -> run_id` — the tick loop in §7.1; the canonical builder of the `Run` aggregate.
+- `attribute_cause(failed_id, failure_t, run_id, M)` and `generate_obituary(...)` — failure-timeline attribution + ADR-019-bounded obituary template (§11.2, §11.3).
+
+### 17.6 Repositories
+
+Plan B owns the only two repositories in the system:
+
+- **`HistorianRepository`** — `src/sim/historian/` (ADR-007). SQLite WAL file; the seven tables of §5.1 (`runs`, `drivers`, `component_states`, `maintenance_events`, `obituaries`, `forecasts`, `checkpoints`); the `(run_id, t, component_id)` primary key is the integration medium for Plan C's citation ACL.
+- **`RetrievalIndex`** — `src/sim/retrieval/` (ADR-010). PyLate PLAID folder over LateOn-Code-edge embeddings of historian-derived snippets; rebuilt per benchmark batch, never mutated piecewise.
+
+The Engine context (Plan A) owns no repositories. The Agent context (Plan C) owns no repositories — it goes through Plan B's published-language tools.
+
+### 17.7 Domain events
+
+Subset of the master event list (PLAN.md §9.7) emitted or consumed by Plan B:
+
+- **Consumed (from Engine):**
+  - `ComponentDegraded` — observed via `ComponentState.status` transitions inside the tick loop; informs failure-attribution scoring.
+  - `ComponentFailed` — triggers `generate_obituary()` synchronously inside the tick (5-s SLA, FR-W.4).
+  - `CascadeTriggered` — recorded into the obituary's `cascade_sentence` (CSC-A/B/C, ADR-003).
+- **Emitted:**
+  - `RunCompleted` — emitted at `writer.finalize_run(run_id)`; makes the run queryable via `query_historian` and indexable via `late_interaction_search`.
+  - `ObituaryEmitted` — emitted on `writer.write_obituary(obit)`; consumed by Plan C's failure-timeline panel within 1 s.
+
+### 17.8 Anti-corruption layer responsibilities
+
+The Simulation context guards against two specific corruptions:
+
+1. **Leaky JSON blobs masquerading as typed data.** Without enforcement, the `metrics_json` and `citations_json` columns could become a free-text grab-bag. Plan B's protection: every read goes through the typed `HistorianRow` Pydantic model (§3.2), which round-trips JSON columns into validated dicts; `tests/historian/test_json_bag_columns.py` asserts the round-trip; the `citations_json` schema is shared with Plan C's `Citation` model so any drift fails the citation-resolver tests.
+2. **Schema drift between the historian DDL and the published Pydantic contract.** Protection: `tests/historian/test_schema.py` applies `schema.sql` to a fresh `:memory:` DB and asserts table list, primary keys, and indexes via `PRAGMA table_info` / `PRAGMA index_list`. The DDL constraints (`PRIMARY KEY (run_id, t, component_id)`, `FOREIGN KEY (run_id) REFERENCES runs(run_id)`) are not advisory — they are the structural guarantee that `query_historian` results match the typed `HistorianRow` shape Plan C expects.
+
+The `ComponentId` enum is imported from Plan A's `engine.contracts`, never redeclared. The `policy` column stores canonical lowercase values (`"none" / "fixed" / "ai"`); the user-facing "Dark Twin" relabeling lives in Plan C alone (ADR-013).
+
+### 17.9 Ubiquitous-language enforcement
+
+The lint/test rules for this plan are the schema tests on `HistorianRow` and the obituary voice / citation lints:
+
+- `pytest tests/historian/test_schema.py` — DDL ↔ Pydantic shape parity (§5.3).
+- `pytest tests/historian/test_json_bag_columns.py` — JSON-column round-trip through typed dicts (§5.3).
+- `pytest tests/policies/obituaries/test_voice_constraints.py` — ADR-019 voice lint (no `!`, no first-person, no banned adjectives) on every obituary narrative.
+- `pytest tests/policies/obituaries/test_citations_resolvable.py` — every entry in `citations_json` resolves to a live `component_states` or `drivers` row in the same `Run`.
+- `pytest tests/sim/test_reproducibility.py` — same `(scenario, policy, seed, config_json)` ⇒ byte-identical historian (NFR-8); a vocabulary drift inside the aggregate would break the SHA-256 compare.
+
+These five commands collectively validate that Plan B's published language stays the language ADR-021 defines and that the aggregate's invariants are enforced at the persistence boundary, not just in memory.

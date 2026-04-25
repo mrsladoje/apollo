@@ -50,6 +50,12 @@ All ADRs in this directory are **Status: Accepted** as of 2026-04-25. If a decis
 | --- | --- | --- |
 | [ADR-020](ADR-020-out-of-scope-rationale.md) | Out-of-scope decisions | 17 deliberately-rejected paths (voice, RL, custom Metal kernels, Omniverse, …) with per-item rationale |
 
+### Architecture & process
+
+| ID | Title | One-line summary |
+| --- | --- | --- |
+| [ADR-021](ADR-021-domain-driven-design-module-structure.md) | DDD module structure with three bounded contexts | Three bounded contexts (Engine / Simulation & History / Agent & Presentation) with shared kernel limited to `ComponentId`; citation validator is the ACL |
+
 ---
 
 ## Conventions

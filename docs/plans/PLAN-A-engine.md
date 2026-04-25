@@ -746,3 +746,96 @@ pytest tests/engine -q --benchmark-only=false \
 ```
 
 When this command exits 0 on the M3 Max, Plan A is done.
+
+---
+
+## 14. DDD compliance
+
+### 14.1 Authoritative ADR
+
+The binding source for the bounded-context structure of Plan A's work is [`ADR-021 — DDD module structure with three bounded contexts`](../adr/ADR-021-domain-driven-design-module-structure.md). This section is a quick reference, not a redefinition: every claim below restates ADR-021 in the local context of the Engine bounded context. If this section drifts from ADR-021, ADR-021 wins; deviation requires a new superseding ADR, not an in-place edit.
+
+### 14.2 Bounded context owned
+
+- **Name:** Engine.
+- **Directory:** `src/engine/`.
+- **Responsibility:** Pure-compute physics. Component decay, the 6×6 coupling matrix `M`, the three named cascades, the DeepXDE PINN for the heater, and the MAPIE conformal layer wrapping every per-component predictor. Owns no repositories — Plan A is stateless across `step()` invocations except for the seeded RNG threaded through `EngineState.rng_state`.
+- **Local ubiquitous language (per ADR-021):** Component, Subsystem, Cascade, Health, Status, Driver, Forecast. These terms are the only domain vocabulary Plan A code introduces; everything else lives in Plan B or Plan C's bounded context.
+- **Published language:** `src/engine/contracts.py` and the three-symbol `src/engine/api.py` surface (§3.2). Anything not exported through these two files is implementation detail and not visible to other contexts.
+
+### 14.3 Aggregate roots
+
+Plan A owns exactly one aggregate root.
+
+| Aggregate | Pydantic embodiment | Invariants enforced by the aggregate |
+| --- | --- | --- |
+| `EngineState` | `EngineState` (§3.1) | Cascade transitions go through `step()`, never by mutating `ComponentState` instances directly (Pydantic `frozen=True` enforces this); per-component `health ∈ [0, 1]` (Pydantic `Field(ge=0.0, le=1.0)`); `status` derives deterministically from `health` via the shared `status_for_health` helper (§6.4) so threshold drift is impossible; `coupling_matrix` retains the ADR-004 sparsity pattern (asserted by `test_coupling_matrix_literal` in §7.4); `rng_state` is serializable (NFR-1, ADR-012). |
+
+`ComponentState`, `Drivers`, `Forecast` are part of the aggregate's exposed surface but are themselves value objects (§14.4) — they have no identity and are never mutated.
+
+### 14.4 Entities vs. value objects
+
+Classification of every Pydantic model in `src/engine/contracts.py` (the §3 frozen contracts of this plan):
+
+| Pydantic model | Classification | Reason |
+| --- | --- | --- |
+| `ComponentId` | Value Object (enum) | Identity is its string value; no lifecycle. Lives in the shared kernel. |
+| `ComponentStatus` | Value Object (enum) | Discrete state; no identity beyond value. Shared kernel. |
+| `ComponentState` | Value Object | `frozen=True`; identified by `(component_id, health, status, metrics)` tuple, not by a separate identity. New step ⇒ new value. |
+| `Drivers` | Value Object | `frozen=True`; pure exogenous input; replaceable wholesale per tick. |
+| `Forecast` | Value Object | `frozen=True`; immutable triple `(point, lower, upper)` plus metadata; no lifecycle. |
+| `EngineState` | **Aggregate Root** | Composes the six `ComponentState` value objects, the coupling matrix, and `rng_state`. The transition function `step()` is the only legitimate mutator. |
+
+Plan A defines **no entities** — there is no per-component identity that survives across ticks beyond the `ComponentId` value. A `ComponentState` at `t = 0` is a different value from the same component's state at `t = 1`; the `EngineState` aggregate root carries the through-time identity.
+
+### 14.5 Domain services
+
+Stateless service functions that orchestrate the aggregate. All three live behind `src/engine/api.py`; they are the only functions outside `src/engine/` may import (per §3.2).
+
+- `step(state, drivers, dt) -> EngineState` — advances every component for `dt` simulated minutes; composes intrinsic decay, matrix coupling, and the explicit CSC-B physics layer. FR-1.8.
+- `forecast(state, horizon_min) -> list[Forecast]` — wraps each component predictor in MAPIE EnbPi block-bootstrap; rejects `horizon_min > 60` (ADR-015 cap). FR-W.6.
+- `initial_state(scenario, seed) -> EngineState` — constructs a fresh `EngineState` with all 6 components at `health = 1.0`, coupling matrix loaded from PRD §10.1, and seeded RNG.
+
+The cascade composition (CSC-A matrix-only, CSC-B Arrhenius + Coffin-Manson on top of `M`, CSC-C matrix-only) is itself a domain service inside `src/engine/cascades/`, invoked by `step()` after intrinsic decay and before clamping to `[0, 1]`.
+
+### 14.6 Repositories
+
+**None.** The Engine context is pure compute (per ADR-021 "Decision" §4 "Repository abstractions"). It owns no persistence. The `models/heater_pinn.pt` artifact is a frozen weights file checked into the repo, not a repository in the DDD sense — it is loaded once at startup by the inference wrapper and is immutable thereafter.
+
+Plan B's `HistorianRepository` and `RetrievalIndex` are the only repositories in the system, both inside the Simulation bounded context.
+
+### 14.7 Domain events
+
+Subset of the master event list (PLAN.md §9.7) emitted or consumed by Plan A:
+
+- **Emitted:**
+  - `ComponentDegraded` — emitted whenever a `ComponentState.status` transitions from FUNCTIONAL to DEGRADED inside `step()`.
+  - `ComponentFailed` — emitted on transition to FAILED. Plan B's simulation loop observes this and triggers obituary generation per FR-W.4.
+  - `CascadeTriggered` — emitted by the CSC-A/B/C composition when an upstream component crosses the trigger threshold for downstream coupling.
+- **Consumed:** none. Plan A is upstream of every other context; events flow outward only.
+
+### 14.8 Anti-corruption layer responsibilities
+
+The Engine context guards against one specific corruption: **bare string component names crossing the `contracts.py` boundary.** The risk is real — every consumer (Plan B's historian, Plan C's citation validator) keys data on `(run_id, component_id, t)`, so a string-vs-enum drift would silently break joins, citation resolution, and the architecture test in §9.8 of the master plan.
+
+Plan A's enforcement:
+
+- `ComponentId` is an `Enum` subclass of `str`, defined exactly once in `src/engine/contracts.py`. Re-defining it elsewhere is a circular-import bug.
+- Every Pydantic model that names a component uses the enum, never `str`.
+- The `metrics` dict on `ComponentState` is keyed by free-form metric names (`blade_thickness_mm`, `current_draw_A`, …), not component names — there is no place for a stray component string inside the aggregate.
+- The architecture test (`tests/architecture/test_no_string_components.py`, see §14.9) greps `src/` for string literals matching the six component names and fails CI if any are found outside the enum definition or test fixtures.
+
+### 14.9 Ubiquitous-language enforcement
+
+The lint/test rule for this plan is `tests/architecture/test_no_string_components.py`. It is a pytest module that:
+
+1. Walks `src/` and parses every `.py` file.
+2. For each string literal in the AST, asserts its value is not in `{"blade", "motor", "nozzle", "resistor", "heater", "insulation"}` unless the file is `src/engine/contracts.py` (the enum definition itself) or under `tests/`.
+3. Fails the build with the file + line of any offender.
+
+Plan A's other verification commands relevant to ubiquitous-language consistency:
+
+- `pytest tests/engine/test_api.py::test_state_report_schema` — confirms the published Pydantic surface matches the `contracts.py` definitions byte-for-byte.
+- `pytest tests/engine/test_determinism_golden.py` — ensures the aggregate's `model_dump_json()` is stable across runs; a vocabulary drift would break the byte-compare.
+
+These three commands collectively validate that Plan A's published language stays the language ADR-021 defines.

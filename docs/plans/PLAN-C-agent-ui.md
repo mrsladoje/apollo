@@ -777,3 +777,93 @@ make demo-mock
 ```
 
 When every command above exits 0 and `make demo-mock` boots cleanly without an internet connection, **Plan C is done.**
+
+---
+
+## 20. DDD compliance
+
+### 20.1 Authoritative ADR
+
+The binding source for the bounded-context structure of Plan C's work is [`ADR-021 — DDD module structure with three bounded contexts`](../adr/ADR-021-domain-driven-design-module-structure.md). This section is a quick reference, not a redefinition: every claim below restates ADR-021 in the local context of the Agent & Presentation bounded context. If this section drifts from ADR-021, ADR-021 wins; deviation requires a new superseding ADR, not an in-place edit.
+
+### 20.2 Bounded context owned
+
+- **Name:** Agent & Presentation.
+- **Directory:** `src/agent/` (Python backend) + `frontend/` (React UI).
+- **Responsibility:** The Voice. Claude Agent SDK loop with five typed tool wrappers, the three-layer Pydantic citation pipeline (ADR-014), the structured refusal template, the SSE wire format (ADR-017), Langfuse OTel observability (ADR-016), the Apollo first-person persona (ADR-019), the React frontend's three Universe panels + Apollo chat panel + What-If panel, and the Ragas + DeepEval automated grounding eval (ADR-018).
+- **Local ubiquitous language (per ADR-021):** Tool Call, Citation, Refusal, Severity, Trace, Persona. Plan C does not introduce vocabulary outside this list; Component / Run / Counterfactual / Obituary are imported from upstream contexts' published languages.
+- **Published language:** `src/agent/contracts.py` (`ApolloResponse`, `Citation`, `ToolCall`) and `frontend/src/types.ts` (`SSEEvent` union) — the Open Host Service consumed by the React frontend, the eval CI, and any future integration. See §3.2, §3.3.
+
+### 20.3 Aggregate roots
+
+Plan C owns exactly one aggregate root.
+
+| Aggregate | Pydantic embodiment | Invariants enforced by the aggregate |
+| --- | --- | --- |
+| `ApolloResponse` | `ApolloResponse` (§3.2) | `len(citations) ≥ 1` unless `severity == "REFUSAL"` (NFR-6, NFR-7, ADR-014), enforced by the `_citations_required_unless_refusal` field validator. Every `Citation` resolves against the historian primary key `(run_id, component_id, t)` via `resolve_citation()` (§7.2) **before** the SSE `done` event fires; unresolvable citations downgrade the aggregate to `severity = "REFUSAL"` and clear `citations`. `severity` is closed under `INFO | WARNING | CRITICAL | REFUSAL`; `tool` membership in each `ToolCall` is closed under the `Literal` of five names. The aggregate is constructed once per turn by the agent loop and is immutable thereafter — the SSE stream is a serialization of the aggregate, not a parallel mutation channel. |
+
+`Citation` and `ToolCall` are part of the aggregate's exposed surface but are themselves value objects (§20.4) — they have no identity beyond their field tuples.
+
+### 20.4 Entities vs. value objects
+
+Classification of every Pydantic model in `src/agent/contracts.py` (the §3 frozen contracts of this plan):
+
+| Pydantic model | Classification | Reason |
+| --- | --- | --- |
+| `Citation` | Value Object | Identified by `(run_id, component, timestamp)` tuple; immutable; its meaning is entirely its field values. The `component` field is typed against the `ComponentId` enum from the shared kernel — string component names are forbidden (§3.4 of master plan, §20.8 below). |
+| `ToolCall` | Value Object | Records one tool invocation snapshot (tool name, args, result, call_id, timing); never edited after the matching `tool-result` event is processed; replayable but not mutable. |
+| `ApolloResponse` | **Aggregate Root** | Composes the citation list, the tool-call list, severity, text, and trace URL; enforces the citation-required-unless-refusal invariant; constructed once per agent turn. |
+| `SSEEvent` (TypeScript discriminated union) | Value Object (over the wire) | Each variant is a snapshot record; the union is the published serialization of `ApolloResponse`. |
+
+Plan C defines **no entities** — there is no per-message identity that survives across turns at the aggregate-root level; the trace URL provides observability identity but lives in Langfuse, not in the bounded-context model.
+
+### 20.5 Domain services
+
+Stateless service functions that orchestrate the `ApolloResponse` aggregate. They are not part of the published language; they are internal collaborators of the aggregate.
+
+- **The agent loop** (`src/agent/loop.py`, §6) — Claude Agent SDK driver that registers the five tools, enforces the system-prompt grounding rules, caps tool calls per turn at 3 (NFR-5), and assembles the final `ApolloResponse`.
+- **The citation validator** (`src/agent/citations.py`, §7.2) — `resolve_citation(c, db) -> bool`; the **Anti-Corruption Layer** between the Agent context and the Historian (Plan B). See §20.8.
+- **The SSE encoder** (`src/agent/sse.py`, §5.2) — `event_stream(events)` validates each event against the frozen schema (§3.3) before yielding it to `EventSourceResponse`; emits a heartbeat every 15 s; ensures the aggregate's invariants hold across the wire.
+- **The persona renderer** (`src/agent/persona.py` + `src/agent/speak.py`, §8) — the < 200-token system prompt loader and the six template-bounded `speak()` generators (one per `ComponentId`); deterministic, no LLM call inside `speak()` so component utterances cannot hallucinate.
+
+### 20.6 Repositories
+
+**None.** The Agent context owns no repositories (per ADR-021 "Decision" §4 "Repository abstractions"). It consumes Plan B's `HistorianRepository` and `RetrievalIndex` exclusively through the four published function tools (`query_historian`, `compare_runs`, `run_counterfactual`, `late_interaction_search`). The fifth tool, `plot_component_history`, emits a `ChartSpec` value object the React frontend renders inline — no persistence on Plan C's side.
+
+The Langfuse trace store is observability infrastructure, not a domain repository; the `trace_url` on `ApolloResponse` is a deep link, not a primary key into a Plan C-owned aggregate.
+
+### 20.7 Domain events
+
+Subset of the master event list (PLAN.md §9.7) emitted or consumed by Plan C:
+
+- **Consumed (from Simulation):**
+  - `RunCompleted` — makes a run queryable; surfaces in the chat panel's run-context selector and the live-sim panel.
+  - `ObituaryEmitted` — Plan C's failure-timeline panel renders the obituary card within 1 s of receipt.
+- **Emitted (to eval / Langfuse):**
+  - `CitationResolved` — emitted via Langfuse OTel for every `Citation` whose `resolve_citation()` returns True; consumed by the eval pipeline (ADR-018) and the demo "Trace" link (ADR-016).
+  - `ResponseRefused` — emitted whenever the aggregate is downgraded to `severity = "REFUSAL"`. Per ADR-014, refusal is a positive signal, not a failure mode; the wildcard dry-run (§15) and DeepEval gate (§14) both treat it as a win when the historian cannot ground a claim.
+
+### 20.8 Anti-corruption layer responsibilities
+
+The Agent context's ACL is the **Pydantic citation validator** (`src/agent/citations.py`), promoted from "yet another validator" to a named architectural fixture per ADR-021 "Decision" §3 ("Agent ↔ Historian: protected by an Anti-Corruption Layer = the Pydantic citation validator (ADR-014)").
+
+The ACL guards three corruptions:
+
+1. **Free-form text drawn from training memory leaking into user-facing prose.** The system prompt (§6.3) forbids it; the field validator on `ApolloResponse.citations` rejects non-REFUSAL responses with empty citations; if the model ignores both, every cited claim still has to resolve against the historian primary key before `done` fires. Three independent layers, one must catch every case (R-6 mitigation).
+2. **Fabricated `(run_id, component, t)` triples.** The adversarial test suite in §7.4 (`tests/agent/test_citations.py`) injects synthetic responses with non-existent triples and asserts the validator downgrades them to REFUSAL with `citations = []`. Partial fabrication (one real + one fabricated citation) also triggers REFUSAL — no partial credit.
+3. **String component names crossing the bounded-context boundary.** `Citation.component` is typed against the `ComponentId` enum imported from the shared kernel; the architecture test (`tests/architecture/test_no_string_components.py`, §9.8 of master plan) enforces that no string literal in `src/` matches a component name outside the enum definition.
+
+The refusal template (§7.3) is the legitimate egress channel when the ACL blocks a response — the user sees a structured explanation, not a fabrication.
+
+### 20.9 Ubiquitous-language enforcement
+
+The lint/test rules for this plan are the citation-validator unit tests and the adversarial citation set:
+
+- `pytest tests/agent/test_citations.py` — the six adversarial cases from §7.4: `test_non_refusal_has_citation`, `test_unknown_component_rejected`, `test_fabricated_citation_refuses`, `test_partial_fabrication_refuses`, `test_refusal_template_text`, `test_pydantic_error_caught`. This is the binding ACL gate.
+- `pytest tests/agent/test_refusal.py` — all four refusal pathways (off-topic, unknown component, unknown run, no rows) end in `severity = "REFUSAL"`.
+- `pytest tests/agent/test_persona_token_budget.py` — Apollo persona prompt < 200 tokens (ADR-019).
+- `pytest tests/agent/test_speak.py` — six template-bounded `speak()` generators, one per `ComponentId`, asserts measurement-grounded output (no affective words; ADR-019 voice lint).
+- `pytest tests/sse/test_event_replay.py` — exact event-order match against the golden trace; a vocabulary drift in the SSE schema would break the replay.
+- `deepeval test run tests/eval/` — Ragas + DeepEval grounding eval (ADR-018, FR-W.9): faithfulness ≥ 0.95, hallucination = 0, including the 6 deliberately-unanswerable questions that must return REFUSAL.
+
+These six commands collectively validate that Plan C's published language stays the language ADR-021 defines and that the citation ACL holds under adversarial input.
