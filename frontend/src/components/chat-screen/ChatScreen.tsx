@@ -1,11 +1,37 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { Tooltip } from 'react-tooltip'
 import { cn } from '@/lib/utils'
 import { SimSection } from '@/components/sim-section'
 import { WhatIfPanel } from '@/components/what-if-panel'
 import { ChatInput } from '@/components/chat-panel/ChatInput'
 import { MessageList } from '@/components/message-bubble'
 import { useChatContext } from '@/hooks/useChatContext'
+
+const APOLLO_TOOLS: { name: string; blurb: string }[] = [
+  {
+    name: 'query_historian',
+    blurb: 'Pull metric history for one component on a single run.',
+  },
+  {
+    name: 'late_interaction_search',
+    blurb:
+      'Semantic search across run logs and obituaries to explain why something failed.',
+  },
+  {
+    name: 'compare_runs',
+    blurb: 'Diff a metric across multiple runs, side by side.',
+  },
+  {
+    name: 'run_counterfactual',
+    blurb:
+      'Deepcopy a run, branch at any tick, replay an alternate action — exact, not estimated.',
+  },
+  {
+    name: 'plot_component_history',
+    blurb: "Render a component's full timeline for one run.",
+  },
+]
 
 interface ChatScreenProps {
   className?: string
@@ -139,11 +165,47 @@ export function ChatScreen({ className }: ChatScreenProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.18, ease: 'easeOut' }}
         >
-          Telemetry, forecasts, and{' '}
-          <span style={{ fontWeight: 600, color: '#0096D6' }}>counterfactual</span>{' '}
-          insight.
+          <span
+            data-tooltip-id='apollo-tools'
+            tabIndex={0}
+            aria-describedby='apollo-tools'
+            style={{
+              fontWeight: 600,
+              color: '#0096D6',
+              cursor: 'help',
+              borderBottom: '1px dotted rgba(0,150,214,0.45)',
+              outline: 'none',
+            }}
+          >
+            Five tools.
+          </span>{' '}
+          One printer. Every tick on the record.
         </motion.h1>
       </header>
+
+      <Tooltip
+        id='apollo-tools'
+        className='apollo-tooltip'
+        classNameArrow='apollo-tooltip-arrow'
+        place='bottom-start'
+        offset={10}
+        opacity={1}
+        clickable
+        delayShow={200}
+        delayHide={120}
+      >
+        <div className='apollo-tooltip-inner'>
+          <div className='apollo-tooltip-eyebrow'>Apollo · Tool calls</div>
+          <ul className='apollo-tooltip-list'>
+            {APOLLO_TOOLS.map((tool) => (
+              <li key={tool.name}>
+                <code>{tool.name}</code>
+                <span>{tool.blurb}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Tooltip>
 
       <div className='page-container space-y-10'>
         <motion.div
