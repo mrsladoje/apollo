@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+from pathlib import Path
 from typing import List
 
 from ._snippets import HistorianSnippet, stream_snippets
@@ -32,23 +34,32 @@ def build_index(
     encode+add pass is cheap. Re-running with ``override=True`` rewrites the
     folder so this is the canonical "rebuild the demo index" entry point.
     """
-    os.makedirs(os.path.dirname(index_path) or ".", exist_ok=True)
+    index_dir = Path(index_path)
+    index_dir.parent.mkdir(parents=True, exist_ok=True)
 
     snippets: List[HistorianSnippet] = list(stream_snippets(historian_path))
     if not snippets:
-        os.makedirs(index_path, exist_ok=True)
+        if index_dir.exists():
+            shutil.rmtree(index_dir)
+        index_dir.mkdir(parents=True, exist_ok=True)
         return 0
 
     from pylate import indexes, models  # type: ignore  # heavy, lazy
 
     model = models.ColBERT(model_name)
-    index = indexes.PLAID(index_folder=index_path, override=True)
+    tmp_index = index_dir.with_name(f"{index_dir.name}.tmp")
+    if tmp_index.exists():
+        shutil.rmtree(tmp_index)
+    index = indexes.PLAID(index_folder=str(tmp_index), override=True)
 
     docs = [s.text for s in snippets]
     doc_ids = [s.doc_id for s in snippets]
 
     embeddings = model.encode(docs, is_query=False)
     index.add_documents(documents_ids=doc_ids, documents_embeddings=embeddings)
+    if index_dir.exists():
+        shutil.rmtree(index_dir)
+    os.replace(tmp_index, index_dir)
     return len(snippets)
 
 

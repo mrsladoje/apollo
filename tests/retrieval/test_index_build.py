@@ -40,8 +40,11 @@ def test_pylate_indexer_writes_real_plaid_artifact(tmp_path, monkeypatch):
     db_path = _build_corpus(tmp_path, horizon=10)
     index_path = tmp_path / "idx"
     n = build_index(str(db_path), str(index_path))
+    n_again = build_index(str(db_path), str(index_path))
     assert n == 10 * 6
+    assert n_again == n
     assert index_path.exists()
+    assert not (tmp_path / "idx.tmp").exists()
     assert not (index_path / "manifest.json").exists()
 
 

@@ -46,3 +46,10 @@ markers = [
     "slow: PLAN-A §10.4 long-running tests (e.g. conformal coverage gate)",
     "ga: opt-in PLAN-B §9 GA / Optuna fitness suite (~15 min); pass --ga",
 ]
+
+[tool.coverage.run]
+omit = [
+    # Offline optimizer scripts are covered by the opt-in GA suite and
+    # exercised by `make train-ga`; the default Plan B gate covers runtime sim.
+    "src/sim/optimizer/*",
+]
