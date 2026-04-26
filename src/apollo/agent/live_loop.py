@@ -28,7 +28,7 @@ _DARK_TWIN_RUN = "barcelona-humid-none-seed0042"
 _KNOWN_RUNS = (
     _APOLLO_RUN,
     _FIXED_RUN,
-    "barcelona-humid-none-seed0042",
+    _DARK_TWIN_RUN,
     "phoenix-dry-ai-seed0042",
     "phoenix-dry-fixed-seed0042",
     "phoenix-dry-none-seed0042",
@@ -154,8 +154,9 @@ async def _stream_all_component_plots(
             yield ev
         return
 
+    label = _run_label(run_id)
     fallback = (
-        f"I plotted all six dark-twin component histories for {run_id}: "
+        f"I plotted all six {label} component histories for {run_id}: "
         + ", ".join(c.value for c in ROW_ORDER)
         + "."
     )
@@ -283,6 +284,8 @@ Aliases:
 - "apollo" means run {_APOLLO_RUN}.
 - "fixed schedule" means run {_FIXED_RUN}.
 - "dark twin graph", "dark twin plot", and "dark twin's components" mean all six components in run {_DARK_TWIN_RUN}.
+- "plot Apollo", "show Apollo", or "Apollo graph" mean all six components in run {_APOLLO_RUN}.
+- "plot fixed schedule", "show fixed schedule", or "fixed schedule graph" mean all six components in run {_FIXED_RUN}.
 - "component history", "plot history", "timeline", "graph", and "show history" mean plot_component_history.
 - "compare Apollo and dark twin" means compare_runs with [{_APOLLO_RUN}, {_DARK_TWIN_RUN}].
 
@@ -368,11 +371,15 @@ def _infer_component(query: str) -> ComponentId | None:
 
 def _wants_all_component_history(query: str) -> bool:
     q = query.lower()
-    if "dark twin" in q and any(word in q for word in ("graph", "plot", "history", "timeline")):
-        return True
     wants_plot = any(word in q for word in ("plot", "history", "timeline", "graph", "show me"))
+    if not wants_plot:
+        return False
+    if _infer_component(query) is not None:
+        return False
+    if _infer_run_id(query, None) in _KNOWN_RUNS:
+        return True
     wants_all = "components" in q or "all six" in q or "all components" in q
-    return wants_plot and wants_all
+    return wants_all
 
 
 def _wants_run_comparison(query: str, run_context: str | None) -> bool:
