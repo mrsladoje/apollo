@@ -131,6 +131,15 @@ def _apply_alternate(state: EngineState, action: Dict[str, Any]) -> EngineState:
     return state
 
 
+def _alternate_component(action: Dict[str, Any]) -> Optional[ComponentId]:
+    if action.get("action") not in ("MAINTENANCE", "swap_blade", "swap"):
+        return None
+    try:
+        return ComponentId(action["component_id"])
+    except (KeyError, ValueError):
+        return None
+
+
 def run_counterfactual(
     run_id: str,
     branch_t: datetime,
@@ -211,6 +220,19 @@ def run_counterfactual(
 
     state = _apply_alternate(state, alternate_action)
 
+    # Track the alternate action so the forward replay below applies the
+    # same maintenance-memory smoothing that ``sim.loop.run_simulation``
+    # uses on the original timeline. Without this, the alternate's reset
+    # gets bitten back by the engine on the very next step and the alt
+    # curve collapses to the original within a couple of ticks (visible
+    # in the chart as a brief blip then convergence).
+    from sim.loop import _apply_maintenance_memory
+
+    alt_clock: Dict[ComponentId, datetime] = {}
+    alt_cid = _alternate_component(alternate_action)
+    if alt_cid is not None:
+        alt_clock[alt_cid] = branch_t
+
     # Reconstruct the alternate timeline with the same row semantics as
     # ``sim.loop.run_simulation``: the row at time ``t`` is the state AFTER
     # ``engine.step()`` was called once with ``drivers.get(t)``. The loaded
@@ -236,6 +258,7 @@ def run_counterfactual(
     while t < end_time:
         drivers = drivers_provider.get(t, scenario_name, seed)
         state = engine.step(state, drivers, time_step_minutes)
+        state = _apply_maintenance_memory(state, alt_clock, t)
         for cid, cstate in state.components.items():
             alt_rows.append(
                 HistorianRow(
@@ -261,13 +284,11 @@ def _compute_diff(
     alternate_action: Dict[str, Any],
 ) -> Dict[str, float]:
     def uptime_minutes(rows: List[HistorianRow]) -> int:
-        by_t: Dict[datetime, bool] = {}
-        for r in rows:
-            if r.t not in by_t:
-                by_t[r.t] = True
-            if r.status == ComponentStatus.FAILED:
-                by_t[r.t] = False
-        return sum(1 for v in by_t.values() if v) * time_step_minutes
+        # Per-component uptime sum: each (component, time) cell contributes
+        # one step when not FAILED. Switched from all-or-nothing system uptime
+        # so that fixing one component still moves the needle when other
+        # components have already failed before the branch point.
+        return sum(time_step_minutes for r in rows if r.status != ComponentStatus.FAILED)
 
     orig_up = uptime_minutes(original)
     alt_up = uptime_minutes(alternate)

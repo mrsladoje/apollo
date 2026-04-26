@@ -54,8 +54,8 @@ export function WhatIfForm({ onSubmit, loading, className }: WhatIfFormProps) {
         <input
           type='range'
           min={0}
-          max={120}
-          step={5}
+          max={600}
+          step={10}
           value={branchT}
           onChange={(e) => setBranchT(Number(e.target.value))}
           className='hp-range w-full'
