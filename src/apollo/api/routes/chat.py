@@ -34,10 +34,23 @@ _loop_singleton: AgentLoop | None = None
 
 
 def get_loop() -> AgentLoop:
+    """One AgentLoop per process. ``AgentLoop.db_path`` is resolved
+    lazily from ``HISTORIAN_PATH`` (with a ``HISTORIAN_DB_PATH`` alias)
+    on each request, so tests that flip the env var between calls pick
+    up the new path without rebuilding the loop.
+    """
     global _loop_singleton
     if _loop_singleton is None:
         _loop_singleton = AgentLoop()
     return _loop_singleton
+
+
+def reset_loop_for_tests() -> None:
+    """Drop the cached AgentLoop so the next ``get_loop()`` rebuilds it
+    against the current ``config/agent.yaml`` and any env overrides.
+    """
+    global _loop_singleton
+    _loop_singleton = None
 
 
 @router.post("/chat")

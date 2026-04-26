@@ -27,7 +27,15 @@ REFUSAL_TEMPLATE = (
 
 
 def _db_path() -> str:
-    return os.environ.get("HISTORIAN_DB_PATH", "historian.db")
+    """Resolve the historian path with the same precedence as the rest of
+    Plan C: ``HISTORIAN_PATH`` (canonical Plan B name in ``sim.contracts``)
+    first, then ``HISTORIAN_DB_PATH`` as a backward-compatible alias.
+    """
+    return (
+        os.environ.get("HISTORIAN_PATH")
+        or os.environ.get("HISTORIAN_DB_PATH")
+        or "historian.db"
+    )
 
 
 def _open_db(db_path: str | None = None) -> sqlite3.Connection:

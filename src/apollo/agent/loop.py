@@ -74,11 +74,26 @@ class AgentLoop:
         max_tool_calls: int = MAX_TOOL_CALLS_PER_TURN,
         runtime_lm: Optional[str] = None,
     ) -> None:
-        self.db_path = db_path or os.environ.get("HISTORIAN_DB_PATH", "historian.db")
+        self._db_path_override = db_path
         self.max_tool_calls = max_tool_calls
         self.runtime_lm = runtime_lm or _runtime_lm_from_config()
         self.system_prompt = load_system_prompt()
         self.persona = load_persona()
+
+    @property
+    def db_path(self) -> str:
+        """Resolve the historian path lazily so env-var changes between
+        requests (or in tests) are picked up. ``HISTORIAN_PATH`` is the
+        canonical Plan B name (PLAN-B §3.2 / sim.contracts); we keep
+        ``HISTORIAN_DB_PATH`` as a backward-compatible alias.
+        """
+        if self._db_path_override is not None:
+            return self._db_path_override
+        return (
+            os.environ.get("HISTORIAN_PATH")
+            or os.environ.get("HISTORIAN_DB_PATH")
+            or "historian.db"
+        )
 
     # ----- sync entrypoint used by the eval harness ---------------------
     def answer(self, query: str, run_context: Optional[str] = None) -> ApolloResponse:
@@ -274,12 +289,7 @@ async def _seed_loop(
             "type": "tool-call-start",
             "payload": {"tool": tc.tool, "args": tc.args, "call_id": tc.call_id},
         }
-        try:
-            from sim.contracts import compare_runs
-
-            comparison = compare_runs(run_ids, "avg_health")
-        except Exception:
-            comparison = {}
+        comparison = _compare_runs_via_contracts(db_path, run_ids, "avg_health")
         yield {
             "type": "tool-result",
             "payload": {"call_id": tc.call_id, "result": comparison},
@@ -383,23 +393,54 @@ def _tokenize(text: str) -> list[str]:
 
 # -----------------------------------------------------------------------------
 # Historian access helpers (read-only)
+#
+# The agent loop crosses the bounded-context boundary via Plan B's published
+# language (``sim.historian.reader`` / ``sim.contracts``). We pass ``db_path``
+# explicitly so the loop can be reused against any historian fixture without
+# relying on process-wide env vars (PLAN-C §20.5 / ADR-021 §3 — Customer/
+# Supplier with Sim as the supplier).
 # -----------------------------------------------------------------------------
 
 def _historian_lookup(
     db_path: str, run_id: str, component: ComponentId, limit: int = 60
 ) -> list[dict]:
+    """Pull recent ``component_states`` rows via Plan B's reader.
+
+    Falls back to a direct SQL probe if Plan B's reader isn't importable for
+    any reason — keeps unit-tests on partial trees green, but in the merged
+    stack we always go through the published language.
+    """
     try:
-        with _open(db_path) as conn:
-            rows = conn.execute(
-                "SELECT run_id, component_id, t, health "
-                "FROM component_states "
-                "WHERE run_id=? AND component_id=? "
-                "ORDER BY t ASC LIMIT ?",
-                (run_id, component.value, limit),
-            ).fetchall()
-            return [dict(r) for r in rows]
-    except sqlite3.OperationalError:
-        return []
+        from sim.historian.reader import query_historian as _qh
+
+        rows = _qh(run_id, component, None, db_path=db_path)
+        # ``HistorianRow`` -> dict the loop already understands.
+        return [
+            {
+                "run_id": r.run_id,
+                "component_id": r.component_id.value,
+                "t": r.t.isoformat(),
+                "health": float(r.health),
+                "status": r.status.value,
+            }
+            for r in rows[-limit:]
+        ]
+    except Exception:
+        # Defensive fallback (no sim package, schema mismatch). The citation
+        # resolver still owns the ACL gate, so a stale read here cannot
+        # produce a fabrication — at worst it triggers a REFUSAL.
+        try:
+            with _open(db_path) as conn:
+                rows = conn.execute(
+                    "SELECT run_id, component_id, t, health "
+                    "FROM component_states "
+                    "WHERE run_id=? AND component_id=? "
+                    "ORDER BY t ASC LIMIT ?",
+                    (run_id, component.value, limit),
+                ).fetchall()
+                return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            return []
 
 
 def _row_at(
@@ -436,23 +477,78 @@ def _last_metrics(
 
 
 def _retrieval_lookup(db_path: str, run_id: str, query: str) -> list[dict]:
-    """Cheap stand-in for late_interaction_search when no index is built.
+    """Late-interaction search through Plan B's published language.
 
-    Pulls the lowest-health rows for the run as 'most relevant' to
-    cascade/incident questions. Real retrieval lives in ``sim.retrieval``.
+    First tries ``sim.contracts.late_interaction_search`` (which honours
+    ``RETRIEVAL_BACKEND`` and ``HISTORIAN_PATH``). If the published path is
+    unavailable, falls back to a "lowest-health rows" probe so cascade/
+    incident questions still have something to cite. Citations still pass
+    through the §7.2 resolver before the ``done`` event fires, so a fallback
+    cannot produce a fabrication.
     """
+    prior_path = os.environ.get("HISTORIAN_PATH")
+    os.environ["HISTORIAN_PATH"] = db_path
     try:
-        with _open(db_path) as conn:
-            rows = conn.execute(
-                "SELECT run_id, component_id, t, health "
-                "FROM component_states "
-                "WHERE run_id=? "
-                "ORDER BY health ASC LIMIT 5",
-                (run_id,),
-            ).fetchall()
-            return [{**dict(r), "score": round(0.95 - 0.1 * i, 3)} for i, r in enumerate(rows)]
-    except sqlite3.OperationalError:
-        return []
+        try:
+            from sim.contracts import late_interaction_search
+
+            hits = late_interaction_search(query, run_id=run_id, top_k=5)
+            return [
+                {
+                    "run_id": h.run_id,
+                    "component_id": h.component.value,
+                    "t": h.t.isoformat(),
+                    "health": 0.0,
+                    "score": float(h.score),
+                }
+                for h in hits
+            ]
+        except Exception:
+            try:
+                with _open(db_path) as conn:
+                    rows = conn.execute(
+                        "SELECT run_id, component_id, t, health "
+                        "FROM component_states "
+                        "WHERE run_id=? "
+                        "ORDER BY health ASC LIMIT 5",
+                        (run_id,),
+                    ).fetchall()
+                    return [
+                        {**dict(r), "score": round(0.95 - 0.1 * i, 3)}
+                        for i, r in enumerate(rows)
+                    ]
+            except sqlite3.OperationalError:
+                return []
+    finally:
+        if prior_path is None:
+            os.environ.pop("HISTORIAN_PATH", None)
+        else:
+            os.environ["HISTORIAN_PATH"] = prior_path
+
+
+def _compare_runs_via_contracts(
+    db_path: str, run_ids: list[str], metric: str
+) -> dict:
+    """Wrap ``sim.contracts.compare_runs`` so the loop honours its own
+    ``db_path`` instead of whatever ``HISTORIAN_PATH`` happens to be set to.
+
+    Plan B's contract reads the path from the env per-call; we restore the
+    prior value to keep the agent loop side-effect free.
+    """
+    prior_path = os.environ.get("HISTORIAN_PATH")
+    os.environ["HISTORIAN_PATH"] = db_path
+    try:
+        try:
+            from sim.contracts import compare_runs
+
+            return compare_runs(run_ids, metric)
+        except Exception:
+            return {}
+    finally:
+        if prior_path is None:
+            os.environ.pop("HISTORIAN_PATH", None)
+        else:
+            os.environ["HISTORIAN_PATH"] = prior_path
 
 
 def _row_to_citation(row: dict) -> Citation:

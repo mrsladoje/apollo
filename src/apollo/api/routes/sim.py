@@ -1,11 +1,21 @@
-"""Sim routes — GET /api/sim/runs and GET /api/sim/stream/:run_id (PLAN-C §5.1)."""
+"""Sim routes — GET /api/sim/runs and GET /api/sim/stream/:run_id (PLAN-C §5.1).
+
+When a real historian is reachable (``HISTORIAN_PATH`` points at a populated
+SQLite file written by Plan B's ``run_simulation``), the routes surface real
+persisted runs and replay real ``component_states`` + ``forecasts`` +
+``obituaries``. When the database is empty or missing they fall back to a
+deterministic synthetic stream so the frontend keeps rendering even before
+``scripts/prerun_scenarios.py`` has been run.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
-from typing import AsyncIterator
+import sqlite3
+from typing import AsyncIterator, Optional
 
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
@@ -14,19 +24,102 @@ from engine.contracts import ComponentId
 
 router = APIRouter(prefix="/api/sim")
 
-UNIVERSES = [
-    {"id": "dark-twin", "label": "Universe A — Dark Twin", "run_id": "dark-twin-00"},
-    {"id": "fixed-schedule", "label": "Universe B — Fixed Schedule", "run_id": "fixed-02"},
-    {"id": "apollo", "label": "Universe C — Apollo (AI)", "run_id": "apollo-03"},
+# Universe → (scenario_name, policy) — the canonical Dark-Twin / Fixed /
+# Apollo mapping per ADR-013 and PLAN-C §10.1.
+UNIVERSE_TO_RUN_PARAMS: dict[str, tuple[str, str, str]] = {
+    "dark-twin":      ("barcelona-humid", "none",  "Universe A — Dark Twin"),
+    "fixed-schedule": ("barcelona-humid", "fixed", "Universe B — Fixed Schedule"),
+    "apollo":         ("barcelona-humid", "ai",    "Universe C — Apollo (AI)"),
+}
+
+# Synthetic fallback when the historian is empty/missing.
+_SYNTH_RUNS = [
+    {"id": "dark-twin",      "label": "Universe A — Dark Twin",       "run_id": "dark-twin-00"},
+    {"id": "fixed-schedule", "label": "Universe B — Fixed Schedule",  "run_id": "fixed-02"},
+    {"id": "apollo",         "label": "Universe C — Apollo (AI)",     "run_id": "apollo-03"},
 ]
+_SYNTH_SEEDS = {"dark-twin-00": 5, "fixed-02": 42, "apollo-03": 99}
 
 COMPONENTS: list[str] = [c.value for c in ComponentId]
 _FORECAST_COMPONENTS: list[ComponentId] = [ComponentId.HEATER, ComponentId.NOZZLE]
 
 
+def _historian_path() -> str:
+    return (
+        os.environ.get("HISTORIAN_PATH")
+        or os.environ.get("HISTORIAN_DB_PATH")
+        or "historian.db"
+    )
+
+
+def _open_historian() -> Optional[sqlite3.Connection]:
+    path = _historian_path()
+    if not os.path.exists(path):
+        return None
+    try:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        # The historian writer creates these on first write; if any are
+        # missing we treat the DB as effectively empty.
+        for table in ("runs", "component_states"):
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            if cur is None:
+                conn.close()
+                return None
+        return conn
+    except sqlite3.Error:
+        return None
+
+
+def _resolve_run_id(conn: sqlite3.Connection, scenario: str, policy: str) -> Optional[str]:
+    row = conn.execute(
+        "SELECT run_id FROM runs WHERE scenario_name=? AND policy=? "
+        "ORDER BY started_at DESC LIMIT 1",
+        (scenario, policy),
+    ).fetchone()
+    return row["run_id"] if row else None
+
+
 @router.get("/runs")
 async def get_runs() -> list[dict]:
-    return UNIVERSES
+    """Return one row per Universe panel.
+
+    Real historian present → real run IDs; otherwise the synthetic fallback
+    so the dashboard still has something to render before ``prerun_scenarios``
+    has been executed.
+    """
+    conn = _open_historian()
+    if conn is None:
+        return _SYNTH_RUNS
+
+    try:
+        out: list[dict] = []
+        for universe_id, (scenario, policy, label) in UNIVERSE_TO_RUN_PARAMS.items():
+            run_id = _resolve_run_id(conn, scenario, policy)
+            if run_id is None:
+                # Partial pre-run. Keep the row but mark it synthetic so
+                # the frontend can still display the panel.
+                out.append({
+                    "id": universe_id,
+                    "label": label,
+                    "run_id": f"{scenario}-{policy}-pending",
+                    "synthetic": True,
+                })
+            else:
+                out.append({
+                    "id": universe_id,
+                    "label": label,
+                    "run_id": run_id,
+                    "scenario": scenario,
+                    "policy": policy,
+                    "synthetic": False,
+                })
+        return out
+    finally:
+        conn.close()
 
 
 def _status(h: float) -> str:
@@ -39,16 +132,145 @@ def _status(h: float) -> str:
     return "FAILED"
 
 
-async def _sim_events(run_id: str, universe_id: str, seed: int) -> AsyncIterator[str]:
-    rng = random.Random(seed)
-    # Degradation multipliers per universe
-    multipliers = {
-        "dark-twin": 1.8,
-        "fixed-schedule": 1.0,
-        "apollo": 0.5,
-    }
-    mult = multipliers.get(universe_id, 1.0)
+async def _historian_events(
+    conn: sqlite3.Connection,
+    run_id: str,
+    universe_id: str,
+    *,
+    delay: float = 0.0,
+    every_n_ticks: int = 1,
+) -> AsyncIterator[str]:
+    """Replay one persisted run as the live SSE stream.
 
+    Tick = one timestamp, with all six component_states. Forecast events
+    fire whenever the historian has rows in ``forecasts`` for that tick.
+    Failure + obituary events fire as soon as we cross a transition into
+    ``FAILED``, keyed off the ``obituaries`` table.
+    """
+    # Pull all timestamps for this run in chronological order.
+    timestamps = [
+        r["t"] for r in conn.execute(
+            "SELECT DISTINCT t FROM component_states WHERE run_id=? ORDER BY t ASC",
+            (run_id,),
+        ).fetchall()
+    ]
+    if not timestamps:
+        return
+
+    # Pre-load obituaries so we know when to emit failure/obituary events.
+    obit_by_t: dict[str, list[dict]] = {}
+    for r in conn.execute(
+        "SELECT component_id, failure_t, narrative FROM obituaries WHERE run_id=?",
+        (run_id,),
+    ).fetchall():
+        obit_by_t.setdefault(r["failure_t"], []).append({
+            "component": r["component_id"],
+            "narrative": r["narrative"],
+        })
+
+    failed_emitted: set[str] = set()
+    tick_index = 0
+    sim_start = timestamps[0]
+
+    for t_iso in timestamps:
+        # Throttle: every Nth tick keeps the stream readable for long runs.
+        if tick_index % every_n_ticks != 0:
+            tick_index += 1
+            continue
+        tick_index += 1
+
+        state_rows = conn.execute(
+            "SELECT component_id, health, status, metrics_json "
+            "FROM component_states WHERE run_id=? AND t=? "
+            "ORDER BY component_id ASC",
+            (run_id, t_iso),
+        ).fetchall()
+
+        states = []
+        for r in state_rows:
+            try:
+                metrics = json.loads(r["metrics_json"] or "{}")
+            except json.JSONDecodeError:
+                metrics = {}
+            states.append({
+                "component_id": r["component_id"],
+                "health": float(r["health"]),
+                "status": r["status"],
+                "metrics": metrics,
+            })
+
+        # t is the offset in minutes from the run's first persisted timestamp.
+        # The frontend reducer expects an integer-ish minute count.
+        from datetime import datetime
+        t_offset = int((datetime.fromisoformat(t_iso) - datetime.fromisoformat(sim_start)).total_seconds() // 60)
+
+        yield json.dumps({
+            "type": "tick",
+            "run_id": run_id,
+            "universe": universe_id,
+            "t": t_offset,
+            "states": states,
+        })
+
+        # Forecasts at this t (one row per component if Plan A persisted it).
+        for fr in conn.execute(
+            "SELECT component_id, horizon_min, point, lower, upper, ci_level "
+            "FROM forecasts WHERE run_id=? AND t=? AND component_id IN (?, ?)",
+            (run_id, t_iso, ComponentId.HEATER.value, ComponentId.NOZZLE.value),
+        ).fetchall():
+            yield json.dumps({
+                "type": "forecast",
+                "run_id": run_id,
+                "universe": universe_id,
+                "t": t_offset,
+                "component": fr["component_id"],
+                "band": {
+                    "component_id": fr["component_id"],
+                    "horizon_min": int(fr["horizon_min"]),
+                    "point": float(fr["point"]),
+                    "lower": float(fr["lower"]),
+                    "upper": float(fr["upper"]),
+                    "ci_level": float(fr["ci_level"]),
+                },
+            })
+
+        # Failure + obituary at this t.
+        for entry in obit_by_t.get(t_iso, []):
+            comp = entry["component"]
+            if comp in failed_emitted:
+                continue
+            failed_emitted.add(comp)
+            yield json.dumps({
+                "type": "failure",
+                "run_id": run_id,
+                "universe": universe_id,
+                "component": comp,
+                "t_fail": t_offset,
+            })
+            yield json.dumps({
+                "type": "obituary",
+                "run_id": run_id,
+                "universe": universe_id,
+                "component": comp,
+                "narrative": entry["narrative"],
+                "citations": [{
+                    "run_id": run_id,
+                    "component": comp,
+                    "timestamp": t_iso,
+                }],
+            })
+
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+
+async def _synthetic_events(
+    run_id: str, universe_id: str, seed: int
+) -> AsyncIterator[str]:
+    """Original deterministic stub — used when the historian is empty."""
+    rng = random.Random(seed)
+    multipliers = {"dark-twin": 1.8, "fixed-schedule": 1.0, "apollo": 0.5}
+    mult = multipliers.get(universe_id, 1.0)
     health = {c: 1.0 for c in COMPONENTS}
 
     for t in range(0, 121, 2):
@@ -64,21 +286,19 @@ async def _sim_events(run_id: str, universe_id: str, seed: int) -> AsyncIterator
                 "metrics": {"temp_C": round(rng.uniform(60, 95), 1)},
             })
 
-        tick = {
+        yield json.dumps({
             "type": "tick",
             "run_id": run_id,
             "universe": universe_id,
             "t": t,
             "states": states,
-        }
-        yield json.dumps(tick)
+        })
 
-        # Emit forecasts for a couple of components every 10 ticks
         if t % 10 == 0:
             for comp_id in _FORECAST_COMPONENTS:
                 comp = comp_id.value
                 h = health[comp]
-                band = {
+                yield json.dumps({
                     "type": "forecast",
                     "run_id": run_id,
                     "universe": universe_id,
@@ -92,39 +312,67 @@ async def _sim_events(run_id: str, universe_id: str, seed: int) -> AsyncIterator
                         "upper": round(min(1, h + 0.02), 3),
                         "ci_level": 0.95,
                     },
-                }
-                yield json.dumps(band)
+                })
 
-        # Emit failure + obituary when a component crosses 0.1
         for comp in COMPONENTS:
             if health[comp] <= 0.1 and health[comp] > 0.0:
                 health[comp] = 0.0
-                failure = {"type": "failure", "run_id": run_id, "universe": universe_id, "component": comp, "t_fail": t}
-                yield json.dumps(failure)
-                obit = {
+                yield json.dumps({
+                    "type": "failure",
+                    "run_id": run_id,
+                    "universe": universe_id,
+                    "component": comp,
+                    "t_fail": t,
+                })
+                yield json.dumps({
                     "type": "obituary",
                     "run_id": run_id,
                     "universe": universe_id,
                     "component": comp,
                     "narrative": f"My {comp} failed at hour {t//60:.1f}. In the Dark Twin, no intervention was made.",
-                    "citations": [{"run_id": run_id, "component": comp, "timestamp": f"2026-04-25T{8 + t//60:02d}:00:00Z"}],
-                }
-                yield json.dumps(obit)
+                    "citations": [{
+                        "run_id": run_id,
+                        "component": comp,
+                        "timestamp": f"2026-04-25T{8 + t//60:02d}:00:00Z",
+                    }],
+                })
 
         await asyncio.sleep(0.3)
 
 
-_SEEDS = {"dark-twin-00": 5, "fixed-02": 42, "apollo-03": 99}
-
-
 @router.get("/stream/{universe_id}")
 async def stream_sim(universe_id: str):
-    universe = next((u for u in UNIVERSES if u["id"] == universe_id), UNIVERSES[0])
-    run_id = universe["run_id"]
-    seed = _SEEDS.get(run_id, 1)
+    """Replay the historian for the configured universe; fall back to the
+    deterministic synthetic stream when no real data is present.
+    """
+    conn = _open_historian()
+    real_run_id: Optional[str] = None
+    if conn is not None and universe_id in UNIVERSE_TO_RUN_PARAMS:
+        scenario, policy, _ = UNIVERSE_TO_RUN_PARAMS[universe_id]
+        real_run_id = _resolve_run_id(conn, scenario, policy)
 
-    async def gen():
-        async for data in _sim_events(run_id, universe_id, seed):
+    if conn is not None and real_run_id is not None:
+        async def gen_real():
+            try:
+                async for data in _historian_events(
+                    conn, real_run_id, universe_id, delay=0.05, every_n_ticks=2
+                ):
+                    yield {"event": "message", "data": data}
+            finally:
+                conn.close()
+        return EventSourceResponse(gen_real(), headers={"Cache-Control": "no-cache"}, ping=15)
+
+    if conn is not None:
+        conn.close()
+
+    fallback = next(
+        (u for u in _SYNTH_RUNS if u["id"] == universe_id), _SYNTH_RUNS[0]
+    )
+    run_id = fallback["run_id"]
+    seed = _SYNTH_SEEDS.get(run_id, 1)
+
+    async def gen_synth():
+        async for data in _synthetic_events(run_id, universe_id, seed):
             yield {"event": "message", "data": data}
 
-    return EventSourceResponse(gen(), headers={"Cache-Control": "no-cache"}, ping=15)
+    return EventSourceResponse(gen_synth(), headers={"Cache-Control": "no-cache"}, ping=15)
