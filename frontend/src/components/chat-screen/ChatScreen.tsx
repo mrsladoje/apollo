@@ -34,7 +34,8 @@ function FixedChat() {
   }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length === 0) return
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
 
   return (
@@ -84,6 +85,10 @@ function FixedChat() {
 }
 
 export function ChatScreen({ className }: ChatScreenProps) {
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
   return (
     <motion.div
       className={cn('relative min-h-screen pb-32 text-foreground', className)}

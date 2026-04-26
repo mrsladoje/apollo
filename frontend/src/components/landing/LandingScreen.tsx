@@ -14,6 +14,10 @@ export function LandingScreen({ onAsk }: LandingScreenProps) {
   const [logoVisible, setLogoVisible] = useState(true)
 
   useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
     const t = setTimeout(() => setLogoVisible(false), ASCII_FADE_OUT_AT)
     return () => clearTimeout(t)
   }, [])
