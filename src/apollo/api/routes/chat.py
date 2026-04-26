@@ -1,10 +1,9 @@
 """Chat route — POST /api/chat returns SSE stream (PLAN-C §5.1).
 
 Behaviour:
-  * APOLLO_AGENT=mock         → canned ``stream_mock_events`` from agent_mock
-  * APOLLO_AGENT=loop (default) → real Apollo agent loop, deterministic seed
-                                  path falls back gracefully when DSPy/Gemma
-                                  aren't installed locally.
+  * APOLLO_AGENT=mock          → canned ``stream_mock_events`` from agent_mock
+  * APOLLO_AGENT=seed|loop     → deterministic offline loop for tests/demos
+  * APOLLO_AGENT=live (default) → live Gemma 4 runtime loop (ADR-022)
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ class ChatRequest(BaseModel):
 
 
 def _agent_mode() -> str:
-    return os.environ.get("APOLLO_AGENT", "loop").lower()
+    return os.environ.get("APOLLO_AGENT", "live").lower()
 
 
 _loop_singleton: AgentLoop | None = None
@@ -41,7 +40,7 @@ def get_loop() -> AgentLoop:
     """
     global _loop_singleton
     if _loop_singleton is None:
-        _loop_singleton = AgentLoop()
+        _loop_singleton = AgentLoop(agent_mode=_agent_mode())
     return _loop_singleton
 
 

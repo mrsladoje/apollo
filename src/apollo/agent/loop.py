@@ -29,6 +29,7 @@ from engine.contracts import ComponentId
 
 from .citations import REFUSAL_TEMPLATE, downgrade_to_refusal, enforce_grounding
 from .contracts import ApolloResponse, Citation, ToolCall
+from .live_loop import stream_live_events
 from .persona import load_persona, load_system_prompt
 from .speak import speak_for_component
 from .tools import REGISTRY, ToolError, list_tools
@@ -73,10 +74,12 @@ class AgentLoop:
         db_path: Optional[str] = None,
         max_tool_calls: int = MAX_TOOL_CALLS_PER_TURN,
         runtime_lm: Optional[str] = None,
+        agent_mode: Optional[str] = None,
     ) -> None:
         self._db_path_override = db_path
         self.max_tool_calls = max_tool_calls
         self.runtime_lm = runtime_lm or _runtime_lm_from_config()
+        self.agent_mode = (agent_mode or os.environ.get("APOLLO_AGENT") or "seed").lower()
         self.system_prompt = load_system_prompt()
         self.persona = load_persona()
 
@@ -106,6 +109,17 @@ class AgentLoop:
     ) -> AsyncIterator[dict]:
         deep = any(trig in query.lower() for trig in DEEP_INVESTIGATION_TRIGGERS)
         cap = self.max_tool_calls if not deep else self.max_tool_calls + 2
+        if self.agent_mode in {"live", "gemma", "gemma_gepa"}:
+            async for ev in stream_live_events(
+                query=query,
+                run_context=run_context,
+                db_path=self.db_path,
+                cap=cap,
+                system_prompt=self.system_prompt,
+                runtime_lm=self.runtime_lm,
+            ):
+                yield ev
+            return
         async for ev in _seed_loop(
             query=query,
             run_context=run_context,

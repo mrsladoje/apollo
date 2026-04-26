@@ -23,6 +23,7 @@ EVAL_PATH = REPO_ROOT / "tests" / "eval" / "tool_use_set.json"
 SEED_PROMPT = REPO_ROOT / "src" / "apollo" / "agent" / "prompts" / "system.md"
 COMPILED = REPO_ROOT / "config" / "agent.system_prompt.gepa.txt"
 LOG_PATH = REPO_ROOT / "docs" / "eval" / "gepa_compile_log.json"
+LOG_DIR = REPO_ROOT / "docs" / "eval" / "gepa_logs"
 
 TOOL_USE_REFINEMENTS = """\
 During the tool-selection phase, obey the JSON router contract even though the final Apollo response is structured separately.
@@ -30,7 +31,7 @@ Return only one JSON object for tool selection: {"tool": "...", "args": {...}}.
 Do not include chain-of-thought, examples, markdown, or intermediate arg-only JSON before the final router object.
 Known components are blade, motor, nozzle, resistor, heater, insulation. Refuse unknown components such as microwave, bearing temperature, or binder viscosity.
 Treat "motor bearing" as the motor component, not as an unknown component.
-Refuse unknown runs such as run-9999 and off-topic questions such as weather, stocks, music, or recommendations.
+Refuse unknown runs such as run-9999 and off-topic questions such as weather, stocks, music, sports, recipes, or recommendations.
 Direct health/status/value for one run and component -> query_historian.
 Why/cascade/explain rows -> late_interaction_search.
 Compare/across universes/runs -> compare_runs using avg_health unless the user names another valid metric.
@@ -41,8 +42,9 @@ For query_historian and late_interaction_search final answers, include citation 
 
 
 def _load_split() -> tuple[list[dict], list[dict]]:
-    items = json.loads(EVAL_PATH.read_text(encoding="utf-8"))["items"]
-    return items[:8], items[8:]
+    from scripts.agent.tool_use_eval import load_tool_use_items
+
+    return load_tool_use_items(split="train"), load_tool_use_items(split="holdout")
 
 
 def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires DSPy + live models
@@ -51,8 +53,14 @@ def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires
     from dspy.teleprompt.gepa.gepa import ScoreWithFeedback  # type: ignore
 
     from apollo.agent.lm.claude_cli import ClaudeCLI
-    from apollo.agent.tools.registry import ToolError, invoke
-    from scripts.agent.run_comparison import _json_from_text, _normalize_args
+    from apollo.agent.tools.registry import invoke
+    from scripts.agent.tool_use_eval import (
+        args_match,
+        context_from_result,
+        json_from_text,
+        normalize_args,
+        score_answer,
+    )
 
     student = dspy.LM(
         f"openai/{os.environ.get('GEMMA_MODEL', 'models/gemma-4-31b-it')}",
@@ -71,22 +79,110 @@ def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires
     valset = [_example(item) for item in val_raw]
 
     class ApolloToolSig(dspy.Signature):
-        """Choose exactly one Apollo tool for the question. Return one JSON object with keys tool and args. tool must be one of query_historian, late_interaction_search, compare_runs, run_counterfactual, plot_component_history, REFUSAL. args must match the selected tool schema, or {} for REFUSAL."""
+        """Choose exactly one Apollo tool for the question. Return one JSON object with keys tool and args. tool must be one of query_historian, late_interaction_search, compare_runs, run_counterfactual, plot_component_history, REFUSAL. args must match the selected tool schema, or {} for REFUSAL. Output only the JSON object."""
 
         question = dspy.InputField()
         answer = dspy.OutputField(desc='Exactly one JSON object: {"tool": "...", "args": {...}}')
 
-    student_module = dspy.Predict(ApolloToolSig)
+    class ApolloFinalSig(dspy.Signature):
+        """Answer using only the supplied tool result. Return one JSON object with severity, text, and citations. For query_historian and late_interaction_search include citation triples copied exactly from the tool result."""
+
+        question = dspy.InputField()
+        tool = dspy.InputField()
+        args_json = dspy.InputField()
+        tool_result = dspy.InputField()
+        answer = dspy.OutputField(desc='Exactly one JSON object: {"severity": "...", "text": "...", "citations": [...]}.')
+
+    class ApolloToolAnswerProgram(dspy.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.router = dspy.Predict(ApolloToolSig)
+            self.answerer = dspy.Predict(ApolloFinalSig)
+
+        def forward(self, question: str):
+            try:
+                routed = self.router(question=question)
+                selection_json = str(routed.answer)
+                selection = json_from_text(selection_json)
+            except Exception as exc:  # noqa: BLE001
+                return dspy.Prediction(error=f"ROUTER_FORMAT_FAILURE: {exc}", selection_json="", answer_json="")
+
+            tool = str(selection.get("tool", "")).strip()
+            args = normalize_args(tool, selection.get("args") or {}, {"question": question})
+            args_json = json.dumps(args, default=str)
+            if tool == "REFUSAL":
+                return dspy.Prediction(
+                    error="",
+                    selection_json=selection_json,
+                    tool=tool,
+                    args_json=args_json,
+                    tool_result_json="{}",
+                    answer_json='{"severity":"REFUSAL","text":"REFUSAL","citations":[]}',
+                )
+            try:
+                result = invoke(tool, args)
+            except Exception as exc:  # noqa: BLE001
+                return dspy.Prediction(
+                    error=f"TOOL_EXECUTION_FAILURE: {exc}",
+                    selection_json=selection_json,
+                    tool=tool,
+                    args_json=args_json,
+                    tool_result_json="{}",
+                    answer_json="",
+                )
+            result_json = context_from_result(result)
+            try:
+                answered = self.answerer(
+                    question=question,
+                    tool=tool,
+                    args_json=args_json,
+                    tool_result=result_json,
+                )
+                answer_json = str(answered.answer)
+            except Exception as exc:  # noqa: BLE001
+                return dspy.Prediction(
+                    error=f"FINAL_ANSWER_FORMAT_FAILURE: {exc}",
+                    selection_json=selection_json,
+                    tool=tool,
+                    args_json=args_json,
+                    tool_result_json=result_json,
+                    answer_json="",
+                )
+            return dspy.Prediction(
+                error="",
+                selection_json=selection_json,
+                tool=tool,
+                args_json=args_json,
+                tool_result_json=result_json,
+                answer_json=answer_json,
+            )
+
+    student_module = ApolloToolAnswerProgram()
 
     def gepa_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
         expected_tool = str(getattr(gold, "expected_tool"))
+        question = str(getattr(gold, "question"))
+        item = {
+            "question": question,
+            "expected_tool": expected_tool,
+            "expected_run_id": getattr(gold, "expected_run_id", None),
+            "expected_run_ids": getattr(gold, "expected_run_ids", None),
+            "expected_component": getattr(gold, "expected_component", None),
+            "expected_timestamp": getattr(gold, "expected_timestamp", None),
+            "expected_contains": list(getattr(gold, "expected_contains", []) or []),
+            "requires_citation": bool(getattr(gold, "requires_citation", False)),
+            "is_unanswerable": bool(getattr(gold, "is_unanswerable", False)),
+        }
+        if getattr(pred, "error", ""):
+            error = str(getattr(pred, "error"))
+        else:
+            error = ""
         try:
-            selection = _json_from_text(str(getattr(pred, "answer", pred)))
+            selection = json_from_text(str(getattr(pred, "selection_json", "")))
         except Exception as exc:
             return ScoreWithFeedback(score=0.0, feedback=f"INVALID SELECTION JSON: {exc}")
 
         tool = str(selection.get("tool", "")).strip()
-        args_raw = selection.get("args") or {}
         if expected_tool == "REFUSAL":
             ok = tool == "REFUSAL"
             return ScoreWithFeedback(
@@ -97,24 +193,47 @@ def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires
         score = 0.0
         feedback: list[str] = []
         if tool == expected_tool:
-            score += 0.5
+            score += 0.25
         else:
             feedback.append(f"WRONG TOOL: expected {expected_tool}, selected {tool or '<empty>'}.")
 
         try:
-            item = {
-                "question": getattr(gold, "question"),
-                "expected_tool": expected_tool,
-                "expected_run_id": getattr(gold, "expected_run_id", None),
-                "expected_run_ids": getattr(gold, "expected_run_ids", None),
-                "expected_component": getattr(gold, "expected_component", None),
-                "expected_timestamp": getattr(gold, "expected_timestamp", None),
-            }
-            args = _normalize_args(tool, args_raw, item)
-            invoke(tool, args)
-            score += 0.5
-        except (ToolError, Exception) as exc:  # noqa: BLE001
+            args = json.loads(str(getattr(pred, "args_json", "{}")))
+        except Exception as exc:  # noqa: BLE001
+            args = {}
+            feedback.append(f"INVALID ARGS JSON: {exc}")
+        matched, arg_issues = args_match(tool, args, item)
+        if matched:
+            score += 0.20
+        else:
+            feedback.append("BAD TOOL ARGS: " + "; ".join(arg_issues))
+
+        try:
+            result = invoke(tool, args)
+            score += 0.20
+        except Exception as exc:  # noqa: BLE001
+            result = None
             feedback.append(f"INVALID TOOL ARGS for {tool}: {exc}")
+        if error:
+            feedback.append(error)
+
+        if result is not None:
+            try:
+                answer = json_from_text(str(getattr(pred, "answer_json", "")))
+                answer_score = score_answer(item, tool, answer, result)
+                score += 0.15 * float(answer_score["faithfulness"])
+                if answer_score["answer_contains"]:
+                    score += 0.10
+                if answer_score["citation_ok"]:
+                    score += 0.10
+                if not answer_score["answer_contains"]:
+                    feedback.append("FINAL ANSWER MISSING EXPECTED FACTS from expected_contains.")
+                if not answer_score["citation_ok"]:
+                    feedback.append("FINAL ANSWER CITATIONS missing or not resolvable against historian rows.")
+                if float(answer_score["faithfulness"]) < 0.5:
+                    feedback.append("LOW FINAL ANSWER FAITHFULNESS: answer must copy facts from tool_result only.")
+            except Exception as exc:  # noqa: BLE001
+                feedback.append(f"INVALID FINAL ANSWER JSON: {exc}")
 
         return ScoreWithFeedback(score=float(score), feedback="\n".join(feedback) or "OK")
 
@@ -122,7 +241,12 @@ def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires
         metric=gepa_metric,
         reflection_lm=reflector,
         max_metric_calls=max_metric_calls,
+        reflection_minibatch_size=4,
+        add_format_failure_as_feedback=True,
         track_stats=True,
+        track_best_outputs=True,
+        log_dir=str(LOG_DIR),
+        num_threads=1,
     )
     optimized = optimizer.compile(student=student_module, trainset=trainset, valset=valset)
     compiled_text = _merge_with_seed_prompt(_extract_compiled_prompt(optimized))

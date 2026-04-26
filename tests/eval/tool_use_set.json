@@ -1,6 +1,7 @@
 {
-  "version": 1,
-  "description": "ADR-022 live tool-use eval: model must choose a tool, provide valid args, use returned telemetry, cite rows, and refuse unsupported questions.",
+  "version": 2,
+  "description": "ADR-022 live tool-use eval seeds. scripts/agent/tool_use_eval.py deterministically expands these into a 60+ case train/holdout suite.",
+  "generated_by": "scripts/agent/tool_use_eval.py",
   "items": [
     {
       "id": "tool-query-nozzle",
