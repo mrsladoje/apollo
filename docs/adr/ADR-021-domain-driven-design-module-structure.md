@@ -26,7 +26,7 @@ We adopt three bounded contexts, one shared kernel, an explicit context map, and
 | --- | --- | --- | --- |
 | Engine | `src/engine/` (Plan A) | Dev A | Component, Subsystem, Cascade, Health, Status, Driver, Forecast |
 | Simulation & History | `src/sim/` (Plan B) | Dev B | Run, Scenario, Policy, Tick, Obituary, Counterfactual, Dark Twin, Retrieval |
-| Agent & Presentation | `src/agent/` + `frontend/` (Plan C) | Dev C | Tool Call, Citation, Refusal, Severity, Trace, Persona |
+| Agent & Presentation | `src/apollo/agent/` + `src/apollo/api/` + `frontend/` (Plan C) | Dev C | Tool Call, Citation, Refusal, Severity, Trace, Persona |
 
 **Shared kernel** is intentionally minimal: the `ComponentId` enum and the small set of cross-context value objects in `src/engine/contracts.py` (`ComponentStatus`, the component-field type used by `Citation`). Every other domain term lives inside its owning context. Adding to the shared kernel requires the 3-way handshake from `PLAN.md` §3 / §2.4 (all three developers sign off; an ADR is updated).
 
@@ -46,7 +46,7 @@ We adopt three bounded contexts, one shared kernel, an explicit context map, and
 - `RunCompleted`, `ObituaryEmitted` (Simulation → Agent + UI).
 - `CitationResolved`, `ResponseRefused` (Agent → eval / Langfuse, ADR-016, ADR-018).
 
-**Repository abstractions:** `HistorianRepository` (`src/sim/historian.py`, ADR-007) and `RetrievalIndex` (`src/sim/retrieval/`, ADR-010) are the only data-access surfaces in the Simulation context. The Engine context is pure compute and owns no repositories. The Agent context owns no repositories — it goes through Simulation's tools.
+**Repository abstractions:** `HistorianRepository` (`src/sim/historian/`, ADR-007) and `RetrievalIndex` (`src/sim/retrieval/`, ADR-010) are the only data-access surfaces in the Simulation context. The Engine context is pure compute and owns no repositories. The Agent context owns no repositories — it goes through Simulation's tools.
 
 **Ubiquitous-language enforcement rules:**
 - String component names are a bug; only `ComponentId` enum members are allowed in code, contracts, and persisted data. A pytest rule (`tests/architecture/test_no_string_components.py`) greps `src/` for string literals matching component names and fails if found outside the enum definition itself or test fixtures.

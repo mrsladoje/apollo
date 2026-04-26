@@ -33,4 +33,6 @@ function Badge({ className, variant, ...props }: BadgeProps) {
   )
 }
 
+// badgeVariants is intentionally exported for class composition outside JSX.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants }

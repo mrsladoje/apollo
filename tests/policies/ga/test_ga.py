@@ -39,8 +39,13 @@ pytestmark = pytest.mark.ga
 @pytest.fixture
 def tiny_ga_config(monkeypatch, tmp_path):
     """Shrink the GA so the test fits in CI."""
-    monkeypatch.setattr(ga_mod, "POP_SIZE", 6)
-    monkeypatch.setattr(ga_mod, "N_GEN", 3)
+    monkeypatch.setattr(ga_mod, "POP_SIZE", 8)
+    monkeypatch.setattr(ga_mod, "N_GEN", 4)
+    monkeypatch.setattr(ga_mod, "NUM_ISLANDS", 2)
+    monkeypatch.setattr(ga_mod, "GA_WORKERS", 1)
+    monkeypatch.setattr(ga_mod, "GA_HORIZON_MINUTES", 120)
+    monkeypatch.setattr(ga_mod, "GA_TIME_STEP_MINUTES", 5)
+    monkeypatch.setattr(ga_mod, "EARLY_STOP_PATIENCE", 3)
     monkeypatch.setattr(ga_mod, "GA_TMP_DB", str(tmp_path / "ga_tmp.db"))
     monkeypatch.setattr(ga_mod, "GA_FITNESS_CSV", str(tmp_path / "ga.csv"))
     monkeypatch.setattr(ga_mod, "POLICIES_YAML", str(tmp_path / "policies.yaml"))
@@ -65,7 +70,7 @@ def test_ga_fitness_csv_format(tiny_ga_config):
             "std_fitness",
         ]
         rows = list(reader)
-    assert len(rows) == ga_mod.N_GEN
+    assert 1 <= len(rows) <= ga_mod.N_GEN
     bests = [float(r["best_fitness"]) for r in rows]
     means = [float(r["mean_fitness"]) for r in rows]
     stds = [float(r["std_fitness"]) for r in rows]

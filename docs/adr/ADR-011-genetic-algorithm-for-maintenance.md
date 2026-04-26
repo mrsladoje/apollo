@@ -15,13 +15,13 @@ Reinforcement learning (PPO, DQN, contextual bandits) was the obvious first thou
 
 ## Decision
 
-Use a **Genetic Algorithm via DEAP**. Encoding: 7-dimensional vector — 6 per-component health thresholds in `[0, 1]` + one global preventive-lookahead coefficient. Population: 50 individuals. Generations: 50. Selection: tournament (k=3). Crossover: blend-α with α=0.5. Mutation: Gaussian per-gene with σ=0.05, p=0.2. Fitness:
+Use a **Genetic Algorithm via DEAP**. Encoding: 7-dimensional vector — 6 per-component health thresholds in `[0, 1]` + one global preventive-lookahead coefficient. Selection: tournament (k=3). Crossover: blend-α with α=0.5. Mutation: Gaussian per-gene with σ=0.05, p=0.2. The production configuration is intentionally small and fast: default population 32, default generations 20, four islands, migration every four generations, elitism, early stopping after five stale generations, and random immigrants when diversity collapses. Fitness:
 
 ```
 fitness = uptime_hours − λ_cost · maintenance_count − λ_failure · catastrophic_failures
 ```
 
-Each fitness evaluation is one full simulation run on the Stressed scenario (most informative landscape). Best-of-population fitness is logged per generation and rendered as a live curve in the demo. The final-generation winner becomes the deployed AI policy thresholds in `config/policies.yaml`. The runtime maintenance trigger is wrapped by an LLM explainer that turns "Blade health crossed 0.43 threshold" into a one-paragraph reason citing the active cascade.
+Each fitness evaluation is one full production-resolution, one-minute-timestep simulation run on the Stressed scenario (most informative landscape). The evaluator runs in memory and deliberately skips SQLite historian writes, forecast persistence, checkpoints, and obituaries; the final demo historian is still generated later from the winning `config/policies.yaml`. Best-of-population fitness is logged per generation and rendered as a live curve in the demo. The final winner becomes the deployed AI policy thresholds in `config/policies.yaml`. The runtime maintenance trigger is wrapped by an LLM explainer that turns "Blade health crossed 0.43 threshold" into a one-paragraph reason citing the active cascade.
 
 ## Alternatives Considered
 
@@ -37,18 +37,19 @@ Each fitness evaluation is one full simulation run on the Stressed scenario (mos
 ## Consequences
 
 **Positive:**
-- DEAP is mature, single-process, no GPU. Each generation is ~50 simulation runs in parallel processes; full GA finishes in tens of minutes on M3 Max.
+- DEAP is mature, CPU-only, and deterministic for a fixed seed. Fitness evaluations run in parallel worker processes; the side-effect-free in-memory path keeps GA training in the minute-scale instead of writing thousands of temporary SQLite rows.
 - The fitness curve is a *demo asset*: a monotonically improving line behind Apollo's voiceover "and here you can see Apollo learning the right maintenance thresholds" lands cleanly.
 - Tunable: λ_cost and λ_failure encode the operator's tradeoff between intervention frequency and failure cost — auditable, not magical.
 - LLM explainer wraps the *output* not the *optimizer*, so the GA stays deterministic-given-seed (NFR-1) while the human-facing reason is generative.
+- Island populations, elite preservation, migration, and random immigrants reduce local-optimum and population-collapse risk while keeping the visual GA story intact.
 
 **Negative / accepted tradeoffs:**
-- GA is sample-inefficient vs. Bayesian opt. We don't care: 2,500 fitness evals × ~10 s sim each is ~7 hours wall-clock — but parallelizes over CPU cores to ~30-45 minutes.
+- GA is sample-inefficient vs. Bayesian opt. We accept that because the search space is only seven scalars, the evaluator is now in memory, and the GA curve is a visible demo moment. Optuna remains a comparator/fallback, not the primary algorithm.
 - Threshold-policy is a *static* policy. It cannot learn online. Acceptable — the brief is about decision intelligence at the printer, not lifelong learning. RL is explicitly out of scope (PRD §3.4).
-- Local optima risk. Mitigated by population diversity + α-blend crossover + restart from best-known hand-tuned seed.
+- Threshold-only policies appear to plateau at seven maintenance actions with zero failures on the corrected one-minute Stressed scenario. Further score improvement likely requires a richer policy representation (for example hysteresis or delay-tolerance genes), not more blind threshold search.
 
 **Neutral / mitigations:**
-- If the fitness landscape is ugly (R-4) and produces a boring jagged curve, the contingency is to swap to Optuna and accept the visual hit. Threshold semantics survive the swap.
+- If the fitness landscape is ugly (R-4), first use the GA's built-in mitigations: seeded islands, migration, early stopping, and random immigrants. Optuna TPE remains built and benchmarked as a dormant fallback; threshold semantics survive the swap.
 - The optimizer runs offline, *before* the demo. Live mode replays the cached fitness history.
 
 ## References

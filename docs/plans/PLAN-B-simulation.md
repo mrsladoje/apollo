@@ -53,7 +53,7 @@ Every commitment below cross-references the binding ADR. Not negotiable.
 | **ADR-006** | Three failure-model families | Plan A-side; we surface the active model in `metrics_json` for retrieval snippets. |
 | **ADR-007** | SQLite historian | **Primary ADR for B1.** WAL mode, single file, exact §14 schema. |
 | **ADR-010** | Late-interaction retrieval — LateOn-Code-edge + PyLate | **Primary ADR for B8.** 17M params, dim 48, Apache 2.0; offline indexing; R-3 dense fallback. |
-| **ADR-011** | GA (DEAP) for maintenance | **Primary ADR for B5.** 7-dim encoding, pop 50 × 50 generations, tournament k=3, blend-α α=0.5, Gaussian σ=0.05 p=0.2. |
+| **ADR-011** | GA (DEAP) for maintenance | **Primary ADR for B5.** 7-dim encoding, production-resolution in-memory fitness, parallel evaluation, seeded islands, migration, elitism, random immigrants, diversity rescue, early stopping. |
 | **ADR-012** | Simulator-checkpoint counterfactual | **Primary ADR for B6.** Deepcopy + branch + diff; RNG state in checkpoint; no causal-DAG library. |
 | **ADR-013** | Three-scenario benchmark + Dark Twin framing | **Primary ADR for B4.** NONE column renamed "Dark Twin" in run names and obituary text. |
 | ADR-014 | Pydantic citations + refusal grounding | Every obituary claim carries `(run_id, component_id, t)`; rows in `obituaries.citations_json` are validated against the same Pydantic schema Plan C uses. |
@@ -249,7 +249,7 @@ Default for any unmatched query: returns the most recent N rows by t. This keeps
 
 ### 4.3 `sim/mocks/gp_fitness_mock.csv`
 
-Pre-canned 50-generation monotone fitness curve, hand-tuned to look like a real GA evolution: slow start, mid-run jump, plateau. Columns: `generation, best_fitness, mean_fitness, std_fitness`. Plan C's Recharts panel renders this from minute one.
+Pre-canned monotone fitness curve, hand-tuned to look like a real GA evolution: slow start, mid-run jump, plateau. Columns: `generation, best_fitness, mean_fitness, std_fitness`. Plan C's Recharts panel renders this from minute one until the real island-GA run replaces it.
 
 ### 4.4 `sim/mocks/counterfactual_mock.py`
 
@@ -622,12 +622,22 @@ import deap.base, deap.creator, deap.tools, deap.algorithms
 #   indices 0..5 = per-component thresholds (blade, motor, nozzle, resistor, heater, insulation)
 #   index   6     = global preventive lookahead coefficient ∈ [0, 1]
 
-POP_SIZE   = 50
-N_GEN      = 50
+POP_SIZE   = int(os.environ.get("GA_POP_SIZE", "32"))
+N_GEN      = int(os.environ.get("GA_N_GEN", "20"))
 TOURNAMENT = 3
 ALPHA      = 0.5      # blend-α crossover
 SIGMA      = 0.05     # Gaussian mutation σ
 MUT_PROB   = 0.2      # per-gene mutation probability
+CX_PROB    = 0.5
+
+NUM_ISLANDS            = int(os.environ.get("GA_NUM_ISLANDS", "4"))
+MIGRATION_INTERVAL     = int(os.environ.get("GA_MIGRATION_INTERVAL", "4"))
+EARLY_STOP_PATIENCE    = int(os.environ.get("GA_EARLY_STOP_PATIENCE", "5"))
+RANDOM_IMMIGRANT_RATE  = float(os.environ.get("GA_RANDOM_IMMIGRANT_RATE", "0.15"))
+DIVERSITY_FLOOR        = float(os.environ.get("GA_DIVERSITY_FLOOR", "1.0"))
+GA_WORKERS             = max(1, (os.cpu_count() or 2) - 2)
+GA_TIME_STEP_MINUTES   = int(os.environ.get("GA_TIME_STEP_MINUTES", "1"))
+GA_HORIZON_MINUTES     = int(os.environ.get("GA_HORIZON_MINUTES", "600"))
 
 LAMBDA_COST    = 1.5    # cost-of-maintenance penalty per action
 LAMBDA_FAILURE = 50.0   # catastrophic failure penalty per FAILED component
@@ -645,24 +655,43 @@ def fitness(individual: list[float]) -> tuple[float]:
         seed=42,
         config_json={"thresholds": thresholds, "lookahead": lookahead},
     )
-    run_id = run_simulation_in_memory(cfg)        # writes to a tmp historian
-    uptime = compute_uptime_hours(run_id)
-    maint  = count_maintenance_actions(run_id)
-    fails  = count_catastrophic_failures(run_id)
+    # In-memory fast path: step engine, apply maintenance memory, count uptime,
+    # maintenance actions, and failures directly.
+    uptime = compute_uptime_hours(cfg)
+    maint  = count_maintenance_actions(cfg)
+    fails  = count_catastrophic_failures(cfg)
     return (uptime - LAMBDA_COST*maint - LAMBDA_FAILURE*fails,)
 ```
 
-Per-fitness-eval simulation is run **in a tmp historian** (not the main `historian.db`) to keep the demo DB clean. Parallelized via `multiprocessing.Pool` to use all M3 cores.
+Per-fitness-eval simulation is run **side-effect-free in memory**, not through `historian.db` and not through a temporary SQLite historian. GA tuning does not need rows, forecasts, checkpoints, or obituaries; those are produced later by `build-grid` from the winning policy. Evaluations run through `ProcessPoolExecutor`, leaving two CPU cores free by default.
 
 ### 9.3 Hand-tuned seed individual
 
-Population is *not* uniformly random. Individual 0 is the hand-tuned seed:
+Population is *not* uniformly random. Early islands receive a seed bank:
 
 ```python
 SEED_INDIVIDUAL = [0.50, 0.55, 0.45, 0.50, 0.55, 0.40, 0.30]
+
+SEED_BANK = (
+    SEED_INDIVIDUAL,
+    (0.30, 0.33, 0.29, 0.26, 0.32, 0.48, 0.0),
+    (0.30, 0.33, 0.29, 0.26, 0.27, 0.48, 0.0),
+    (0.3740, 0.3945, 0.2960, 0.1685, 0.1750, 0.3312, 0.0),
+    (0.25, 0.24, 0.33, 0.47, 0.34, 0.14, 0.0),
+    (0.20, 0.35, 0.25, 0.40, 0.35, 0.25, 0.0),
+)
 ```
 
-This guarantees the GA starts from a working policy and the curve is monotone-ish from generation 1 (R-4 mitigation at the algorithm level).
+This guarantees the GA starts from working policies and useful neighborhoods while still evolving the result. The current best production-resolution seed scores full 10-hour uptime with zero failures and seven maintenance actions (`best_fitness = -0.5` under the corrected cost function).
+
+### 9.3a Islands, diversity, and early stop
+
+- Split the population into islands (`GA_NUM_ISLANDS`, default 4).
+- Evaluate each generation in one worker pool so cores stay busy.
+- Preserve each island champion before selection.
+- Migrate island champions every `GA_MIGRATION_INTERVAL` generations.
+- Replace the worst non-elite individuals with random immigrants each generation; double the immigrant rate when population fitness diversity falls below `DIVERSITY_FLOOR`.
+- Stop after `EARLY_STOP_PATIENCE` generations without best-fitness improvement.
 
 ### 9.4 Generation logging → CSV
 
@@ -683,29 +712,29 @@ Output: `data/ga_fitness.csv`. Plan C's Recharts panel reads this verbatim.
 
 ### 9.5 Final winner → `config/policies.yaml`
 
-After generation 50, the best individual writes:
+After the final generation or early stop, the best individual writes:
 
 ```yaml
 # config/policies.yaml — generated, do not hand-edit
 ai_policy:
   thresholds:
-    blade:      0.43
-    motor:      0.51
-    nozzle:     0.39
-    resistor:   0.47
-    heater:     0.52
-    insulation: 0.36
-  lookahead_coef: 0.27
+    blade:      0.3740
+    motor:      0.3945
+    nozzle:     0.2960
+    resistor:   0.1685
+    heater:     0.1750
+    insulation: 0.3312
+  lookahead_coef: 0.0000
   trained_on:    "stressed-seed0042"
-  ga_generation: 50
-  best_fitness:  187.3
+  ga_generation: 6
+  best_fitness:  -0.5000
 ```
 
 The AI runs in §8 load this file at startup. **The GA must finish before the AI runs in the 3×3 grid run** — schedule in §14 enforces this.
 
 ### 9.6 R-4 fallback (Optuna)
 
-If by hour 9 the fitness curve looks flat or jagged, swap in:
+If by hour 9 the fitness curve looks flat or jagged, first use the GA controls above: increase islands, widen random immigrants, or adjust early-stop patience. If the threshold-only landscape still fails, compare against:
 
 ```python
 # sim/optimizer/optuna_fallback.py
@@ -713,11 +742,11 @@ import optuna
 def optimize_with_optuna(n_trials=200): ...
 ```
 
-Same encoding, same fitness, different algorithm. Threshold semantics survive the swap (per ADR-011 contingency). **Not deferred — built but dormant.**
+Same encoding, same fitness, different algorithm. Threshold semantics survive the swap (per ADR-011 contingency). **Not deferred — built but dormant.** A 200-trial TPE comparison remained worse than the GA on the corrected scoring path, so GA stays the demo algorithm.
 
 ### 9.7 Tests (`tests/policies/ga/`)
 
-- `test_ga_determinism.py` — same DEAP seed → same final individual, byte-identical fitness CSV.
+- `test_ga_determinism.py` — same DEAP seed → same final individual.
 - `test_fitness_function.py` — known individual on tiny scenario → known fitness within ε.
 - `test_csv_format.py` — header order + column names match Plan C's expectations.
 - `test_optuna_fallback.py` — Optuna path produces a valid `policies.yaml`.
@@ -728,9 +757,9 @@ pytest tests/policies/ga/ -v
 
 ### 9.8 Acceptance checklist
 
-- [ ] `data/ga_fitness.csv` exists with 50 rows + header.
+- [ ] `data/ga_fitness.csv` exists with header and one row per completed generation until early stop.
 - [ ] `config/policies.yaml` written, validates against schema.
-- [ ] Best fitness in generation 50 ≥ best fitness in generation 1.
+- [ ] Best fitness in final row ≥ best fitness in generation 1.
 - [ ] AI policy run uses thresholds from `config/policies.yaml`, not hardcoded.
 - [ ] Optuna fallback path tested end-to-end.
 
@@ -1106,15 +1135,15 @@ Tight. Mocks first; real backends swap in transparently.
 | **2–3** | B2: Driver providers + offline cache. Hit OpenWeather APIs, persist CSVs. Mock providers wired. | B3 |
 | **3–5** | B3: Simulation loop. Wired against Plan A's `mock_engine.py` until A ships real `step()`. **By hour 5, real historian replaces `historian_mock.py` for Plan C.** | Plan C real backend |
 | **5–7** | B4: Three scenarios + three policies (NONE, FIXED stub). Build first 6 of 9 grid runs (NONE + FIXED). Dark-Twin-kill test green. | B5 fitness function |
-| **7–9** | B5: DEAP GA setup. Fitness on Stressed scenario, multiprocess pool. **GA running by hour 9.** Live fitness CSV emitted. | AI policy real run |
-| **9–10** | B5 continued: GA finishes (~30 min), `policies.yaml` written. AI runs (3 of 9) appended to grid. **Full 3×3 grid complete by hour 10.** | retrieval indexer |
+| **7–9** | B5: DEAP island GA setup. Production-resolution in-memory fitness on Stressed scenario, parallel worker pool, live fitness CSV emitted. **GA running by hour 9.** | AI policy real run |
+| **9–10** | B5 continued: GA early-stops when plateaued, `policies.yaml` written. AI runs (3 of 9) appended to grid. **Full 3×3 grid complete by hour 10.** | retrieval indexer |
 | **10–11** | B6: Counterfactual checkpoints sidecar + `run_counterfactual` impl. **By hour 11, real counterfactual replaces `counterfactual_mock.py`.** | Plan C What-If real |
 | **11–12** | B7: Obituary generation + failure attribution. ADR-019 voice lint. Backfill obituaries for the 9 grid runs. | Plan C failure timeline |
 | **12–13** | B8: PyLate indexer + LateOn-Code-edge model load. Index the 9 runs (~10k rows). NFR-4 latency benchmark green. **By hour 13, real retrieval replaces `late_interaction_mock.py`.** | Plan C agent retrieval real |
 | **13–14** | Integration handoff dry-run with Plan A and Plan C. End-to-end smoke: query → search → counterfactual → obituary. | demo path |
-| **14–15** | Buffer / R-fallback armament: Optuna swap-in test, dense-embedding swap-in test, offline-cache validation. Final reproducibility gate green. | demo confidence |
+| **14–15** | Buffer / R-fallback armament: GA island/immigrant tuning, Optuna benchmark fallback test, dense-embedding swap-in test, offline-cache validation. Final reproducibility gate green. | demo confidence |
 
-Slack: ~1 hour absorbed across hours 14–15. If anything slips, the cut order is: latency benchmark loosened (NFR-4 → 400 ms), then Optuna swap, then dense-embedding swap. **Nothing in scope is cut.**
+Slack: ~1 hour absorbed across hours 14–15. If anything slips, the cut order is: latency benchmark loosened (NFR-4 → 400 ms), then Optuna fallback UI polish, then dense-embedding swap. **Nothing in scope is cut.**
 
 ---
 
@@ -1123,7 +1152,7 @@ Slack: ~1 hour absorbed across hours 14–15. If anything slips, the cut order i
 | ID (PRD §19) | Risk | Mitigation in this plan |
 | --- | --- | --- |
 | **R-3** | Late-interaction retrieval too slow at demo time | (a) Pre-index offline (no live indexing). (b) NFR-4 benchmark in CI. (c) Dense-embedding fallback (Voyage / OpenAI) built and dormant; switch is one env var (§12.5). (d) Cap historian to ≤ 12k rows by setting horizon to 600 min × 9 runs × 6 components ≈ 32k → only index the latest 10k via row stride if needed. |
-| **R-4** | GA fitness landscape ugly / boring curve | (a) Hand-tuned seed individual (§9.3) ensures monotone-ish curve from gen 1. (b) Optuna fallback built and dormant (§9.6). (c) λ_cost / λ_failure tuned in dry-run before real GA. |
+| **R-4** | GA fitness landscape ugly / boring curve | (a) Seed bank (§9.3) gives working starting islands. (b) Island migration, elitism, random immigrants, diversity rescue, and early stopping keep the GA from collapsing. (c) Optuna fallback built and dormant (§9.6). (d) λ_cost / λ_failure tuned in dry-run before real GA. |
 | **R-5** | Three-scenario sim too slow live | (a) Pre-run all 9 in `make build_grid` before the demo. (b) Live mode replays from historian at 10× speed (Plan C does the playback; we ship the data). (c) `time_step_minutes` is configurable — bump to 5 if needed. |
 | **R-7** | Demo venue Wi-Fi blocks API access | (a) `cache_all` driver script run pre-demo (§6.2). (b) All 9 grid runs use Mock providers reading local CSVs. (c) SQLite is file-based — nothing to dial out for. (d) PyLate model artifact downloaded and cached locally; no HuggingFace round-trip at demo. |
 | Misc | Plan A's `step()` not ready when we need it | `mock_engine.py` from Plan A at hour 0 unblocks B3. We pin to that interface exactly; swap is transparent. |

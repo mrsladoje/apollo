@@ -515,9 +515,9 @@ data/
 
 ### 9.2 Per-component wrapping
 
-For every `ComponentId`, build a MAPIE 1.3 `TimeSeriesRegressor(estimator=ComponentPredictor(c), method="enbpi", agg_function="mean", cv=BlockBootstrap(n_resamplings=20, length=30, overlapping=False, random_state=0))`, where `ComponentPredictor(c)` is a thin sklearn-compatible adapter that calls the component's `intrinsic_decay` (rule-based) or the PINN (heater) over a horizon.
+For every `ComponentId`, build a MAPIE 1.3 `TimeSeriesRegressor(estimator=ComponentPredictor(c), method="enbpi", agg_function="mean", cv=BlockBootstrap(n_resamplings=20, length=30, overlapping=False, random_state=0))`. `ComponentPredictor(c)` is a deterministic sklearn-compatible horizon adapter over `(current_health, horizon_min)` with the component-specific calibrated decay slope persisted next to the residuals. The real component/PINN path still produces the realised trajectory; MAPIE calibrates the forecast interval layer against residuals from those realised trajectories.
 
-Calibration data: take the **last 2 hours** of the Barcelona-humid scenario from Plan B's historian as the calibration set. Block bootstrap with block size 30 simulated minutes (handles the cascade-onset autocorrelation ADR-015 calls out).
+Calibration data: persist per-horizon residual arrays under `data/conformal_residuals/<component>.npz`, derived from the benchmark trajectories. The wrapper reconstructs a synthetic MAPIE calibration matrix from those residuals so the online `forecast()` path stays fast and does not re-run the engine/PINN for every horizon. Block bootstrap with block size 30 simulated minutes handles the cascade-onset autocorrelation ADR-015 calls out.
 
 ```python
 # src/engine/conformal/wrapper.py
@@ -527,7 +527,7 @@ from mapie.subsample import BlockBootstrap
 class ConformalForecaster:
     def __init__(self, predictor, ci_level: float = 0.95):
         self.mapie = TimeSeriesRegressor(
-            estimator=predictor,
+            estimator=predictor,  # deterministic calibrated horizon adapter
             method="enbpi",
             cv=BlockBootstrap(n_resamplings=20, length=30, overlapping=False, random_state=0),
             agg_function="mean",

@@ -4,8 +4,8 @@ Exactly three symbols cross this boundary: `step`, `forecast`,
 `initial_state`. Everything else under `engine/` is implementation detail
 per ADR-021 (Engine bounded context published language).
 
-`APOLLO_ENGINE=mock` routes to `engine.mock_engine` for Plan B's smoke
-tests / demo dry-runs (PLAN-A §4.3). Otherwise the real engine composes
+`APOLLO_ENGINE=mock` or `USE_MOCKS=1` routes to `engine.mock_engine` for
+Plan B's smoke tests / demo dry-runs (PLAN-A §4.3). Otherwise the real engine composes
 intrinsic decay + the §7 coupling matrix + the §7.3 CSC-B physics and
 wraps `forecast()` with the §9 MAPIE conformal layer (loaded lazily so
 A1-A3 unit tests can run without sklearn warm-up cost).
@@ -36,8 +36,12 @@ from engine.contracts import (
 from engine.coupling import apply_coupling
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on", "mock"}
+
+
 def _is_mock() -> bool:
-    return os.environ.get("APOLLO_ENGINE") == "mock"
+    return os.environ.get("APOLLO_ENGINE", "").lower() == "mock" or _truthy_env("USE_MOCKS")
 
 
 # Module-level cache for the component registry. Each component is

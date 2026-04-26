@@ -29,7 +29,7 @@ All ADRs in this directory are **Status: Accepted** as of 2026-04-25. If a decis
 | [ADR-008](ADR-008-claude-agent-sdk-and-sonnet.md) | Claude Agent SDK + Sonnet-class *(model partially superseded by ADR-022)* | Loop framework: Claude Agent SDK + Pydantic-typed tools + Langfuse OTel. Runtime model is now Gemma 4 31B per ADR-022; this ADR retains the SDK/loop rationale. |
 | [ADR-009](ADR-009-pattern-c-agentic-diagnosis.md) | Pattern C — Agentic Diagnosis | Highest tier in the brief; 5 typed tools with visible UI tool-call traces |
 | [ADR-010](ADR-010-late-interaction-retrieval-lateon-code-edge.md) | Late-interaction retrieval | LightOn LateOn-Code-edge (17M, Apache 2.0) over dense embeddings |
-| [ADR-011](ADR-011-genetic-algorithm-for-maintenance.md) | GA (DEAP) for maintenance scheduling | Visible fitness curve in demo; avoids RL training instability |
+| [ADR-011](ADR-011-genetic-algorithm-for-maintenance.md) | GA (DEAP) for maintenance scheduling | Island GA with in-memory fitness; visible curve without RL training instability |
 | [ADR-012](ADR-012-simulator-checkpoint-counterfactual.md) | Simulator-checkpoint counterfactuals | We own the sim; deepcopy + branch + diff beats DoWhy/EconML |
 | [ADR-013](ADR-013-dark-twin-three-scenarios.md) | Three scenarios + Dark Twin framing | Barcelona/Phoenix/Stressed × NONE/FIXED/AI; reframed as parallel universes |
 

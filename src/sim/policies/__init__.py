@@ -53,6 +53,9 @@ class AIPolicy:
             if comp.health < self.thresholds.get(cid, 0.4):
                 return cid
         
+        if self.lookahead_coef <= 0:
+            return None
+
         # 2. Forecast lookahead check (ADR-011 / PLAN-B §8.2). Routes via
         # engine.api so APOLLO_ENGINE=mock still works for dry-run smoke
         # tests while the default path exercises the real MAPIE conformal

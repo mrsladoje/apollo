@@ -18,6 +18,26 @@ from pydantic import BaseModel, ConfigDict
 from engine.contracts import ComponentId, ComponentStatus
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on", "mock"}
+
+
+def _historian_backend() -> str:
+    if _truthy_env("USE_MOCKS"):
+        return "mock"
+    return os.environ.get("HISTORIAN_BACKEND", "real").lower()
+
+
+def _retrieval_backend() -> str:
+    if _truthy_env("USE_MOCKS"):
+        return "mock"
+    return os.environ.get("RETRIEVAL_BACKEND", "lateon").lower()
+
+
+def _historian_path() -> str:
+    return os.environ.get("HISTORIAN_PATH", "historian.db")
+
+
 class HistorianRow(BaseModel):
     model_config = ConfigDict(frozen=True)
     run_id: str
@@ -34,12 +54,14 @@ def query_historian(
     time_range: Optional[Tuple[datetime, datetime]] = None,
 ) -> List[HistorianRow]:
     """Query the historian for a specific run and component."""
-    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+    if _historian_backend() == "mock":
         from sim.mocks.historian_mock import query_historian as _query_historian
+
+        return _query_historian(run_id, component, time_range)
     else:
         from sim.historian.reader import query_historian as _query_historian
 
-    return _query_historian(run_id, component, time_range)
+        return _query_historian(run_id, component, time_range, db_path=_historian_path())
 
 
 def compare_runs(run_ids: List[str], metric: str) -> Dict[str, float]:
@@ -47,12 +69,14 @@ def compare_runs(run_ids: List[str], metric: str) -> Dict[str, float]:
 
     Returns ``{run_id: float, ...}``. Plan C charts this directly.
     """
-    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+    if _historian_backend() == "mock":
         from sim.mocks.historian_mock import compare_runs as _compare_runs
+
+        return _compare_runs(run_ids, metric)
     else:
         from sim.historian.reader import compare_runs as _compare_runs
 
-    return _compare_runs(run_ids, metric)
+        return _compare_runs(run_ids, metric, db_path=_historian_path())
 
 
 class CounterfactualResult(BaseModel):
@@ -68,12 +92,19 @@ def run_counterfactual(
     alternate_action: Dict[str, Any],
 ) -> CounterfactualResult:
     """Run a counterfactual simulation branching from a specific point in time."""
-    if os.environ.get("HISTORIAN_BACKEND", "real").lower() == "mock":
+    if _historian_backend() == "mock":
         from sim.mocks.counterfactual_mock import run_counterfactual as _run_counterfactual
+
+        return _run_counterfactual(run_id, branch_t, alternate_action)
     else:
         from sim.counterfactual.engine import run_counterfactual as _run_counterfactual
 
-    return _run_counterfactual(run_id, branch_t, alternate_action)
+        return _run_counterfactual(
+            run_id,
+            branch_t,
+            alternate_action,
+            db_path=_historian_path(),
+        )
 
 
 class RetrievedRow(BaseModel):
@@ -91,7 +122,7 @@ def late_interaction_search(
     top_k: int = 10,
 ) -> List[RetrievedRow]:
     """Perform a late-interaction semantic search over the historian data."""
-    backend = os.environ.get("RETRIEVAL_BACKEND", "lateon").lower()
+    backend = _retrieval_backend()
 
     if backend == "mock":
         from sim.retrieval.search_mock import late_interaction_search as _search

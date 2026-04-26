@@ -211,7 +211,7 @@ def late_interaction_search(
 Plan C owns the wire format the React frontend and the eval CI consume.
 
 ```python
-# src/agent/contracts.py — owned by Plan C
+# src/apollo/agent/contracts.py — owned by Plan C
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, validator
@@ -297,7 +297,7 @@ Plan C: write contracts.py + agent_mock.py + tool_mocks.py + forecasts_mock.json
               before any real implementation lands.
 ```
 
-Mocks live alongside real implementations under the same module path with a `_mock` suffix. A `USE_MOCKS=1` env var (default during dev) wires every import to the mock; integration switches it to 0.
+Mocks live alongside real implementations under the same module path with a `_mock` suffix. `USE_MOCKS=1` is the umbrella dry-run switch; integration switches it to `0` / unset. Individual layers may also be forced independently for targeted tests: `APOLLO_ENGINE=mock`, `HISTORIAN_BACKEND=mock`, `RETRIEVAL_BACKEND=mock`, `APOLLO_TOOLS_BACKEND=mock`, and `APOLLO_AGENT=mock`.
 
 ### 5.1 Mock fidelity rules
 
@@ -317,11 +317,11 @@ This combines all three plans onto a single calendar. Each plan's individual tim
 | 0–1 | Write `contracts.py`. Ship `mock_engine.py`. | Write `contracts.py`. Ship 4 mocks. | Write `contracts.py`. Ship `agent_mock.py` + `tool_mocks.py`. | **G0 — contracts frozen.** All three commit `contracts.py` and mocks. PR review by all 3. |
 | 1–4 | Failure-model classes (exp / Weibull / Coffin-Manson). Unit tests. Component models 1–3. | Historian DDL + WAL. Sim loop tick. Driver providers (mock + real). | FastAPI + sse-starlette skeleton. SSE event-order test against `agent_mock`. React chat panel renders streaming text. | — |
 | 4–6 | Component models 4–6. Coupling matrix M. CSC-A and CSC-C wiring. | 3 scenarios × 3 policies grid running with mock engine. NONE/FIXED policies. Failure detection. | Live sim panel rendering against `historian_mock`. Three Universe panels with Dark Twin labels. Conformal Area band placeholder. | **G1 — engine mock replaced.** Plan A's real engine wired into Plan B's sim loop. Sim runs against real engine (no mock). Both pytest suites stay green. |
-| 6–9 | PINN training (DeepXDE on MPS). Train, freeze, save artifact. CSC-B explicit physics (Arrhenius + Coffin-Manson). | DEAP GA running on Stressed scenario. Counterfactual engine (checkpoint+branch). Obituaries generator. | Real Claude Agent SDK loop wired with 5 tools (still pointing at Plan B mocks). Pydantic citation validator + adversarial fabricated-citation tests pass. Apollo persona prompt loaded. | — |
+| 6–9 | PINN training (DeepXDE on MPS). Train, freeze, save artifact. CSC-B explicit physics (Arrhenius + Coffin-Manson). | DEAP island GA running on Stressed scenario with production-resolution in-memory fitness. Counterfactual engine (checkpoint+branch). Obituaries generator. | Real Claude Agent SDK loop wired with 5 tools (still pointing at Plan B mocks). Pydantic citation validator + adversarial fabricated-citation tests pass. Apollo persona prompt loaded. | — |
 | 9–11 | PINN integrated as Heating Element model. NFR-3 latency benchmarked. | PyLate index built over historian. NFR-4 latency benchmarked. Late-interaction search wired. | Langfuse OTel set up. "Trace" links live. What-If panel rendering against `counterfactual_mock`. | **G2 — historian mock replaced.** Plan B's real historian, GA, counterfactual, and PyLate index are wired in. Plan C's tools call the real Plan B implementations. End-to-end smoke test: Barcelona printhead canonical query produces a fully-cited response with a real Langfuse trace. |
 | 11–13 | MAPIE conformal layer wrapping all 6 component predictors. Coverage test on Stressed scenario passes ≥ 90% at 95% CI. | All 9 runs pre-computed and persisted. Obituaries written. Run IDs frozen. | Real conformal bands rendering on Recharts. Ragas test-set generator runs; 30 grounded Q/A committed. DeepEval CI: faithfulness ≥ 0.95, hallucination = 0. | **G3 — eval gate green.** `deepeval test run tests/eval/` exits 0. README badge updated. |
 | 13–14 | Definition of done verification: every FR-1.x + FR-W.6 + NFR-1/2/3 verification command runs green. | Definition of done: every FR-2.x + FR-3.6 (Plan B side) + FR-W.4 + NFR-4/8 green. Reproducibility byte-compare passes. | Live "Ask Apollo" 10-question dry-run: 0 hallucinations. Savings slide drafted. | **G4 — full system integration.** All three plans on real implementations end-to-end. |
-| 14–15 | Buffer / R-1 mitigation if cascade timing drifts. | Buffer / R-4 mitigation (Optuna swap) if GA curve ugly. | Buffer / Demo polish. Architecture diagram. README. | — |
+| 14–15 | Buffer / R-1 mitigation if cascade timing drifts. | Buffer / R-4 mitigation: tune GA islands, immigrant rate, and early-stop patience; Optuna remains a benchmark fallback if GA curve is still ugly. | Buffer / Demo polish. Architecture diagram. README. | — |
 | 15–17 | (Sat morning) Demo polish, Apollo persona tuning, Dark Twin component obituaries staged. | (Sat morning) Pre-record canned demo path for R-7. | (Sat morning) Final dress rehearsal. Speaker notes. | **G5 — demo ready.** Full dry-run end-to-end. |
 
 **Sync gates G0–G5 are mandatory.** No plan progresses past a gate until all three sign off in the gate's PR.
@@ -434,7 +434,7 @@ Three bounded contexts, one per phase, one per developer, one `contracts.py` pub
 | --- | --- | --- | --- | --- |
 | **Engine** | Plan A | `src/engine/` | Component physics, failure models, coupling matrix, cascades, PINN, conformal forecasting | Component, Subsystem, Cascade, Health, Status, Driver, Forecast |
 | **Simulation & History** | Plan B | `src/sim/` | Tick-driven simulation loop, historian (SQLite WAL), scenario+policy grid, GA optimizer, counterfactual replay, obituaries, retrieval index | Run, Scenario, Policy, Tick, Obituary, Counterfactual, Dark Twin, Retrieval |
-| **Agent & Presentation** | Plan C | `src/agent/` + `frontend/` | Claude Agent SDK loop, five typed tools, Pydantic citation pipeline, refusal templates, SSE wire format, Langfuse traces, React UI | Tool Call, Citation, Refusal, Severity, Trace, Persona |
+| **Agent & Presentation** | Plan C | `src/apollo/agent/` + `src/apollo/api/` + `frontend/` | Claude Agent SDK loop, five typed tools, Pydantic citation pipeline, refusal templates, SSE wire format, Langfuse traces, React UI | Tool Call, Citation, Refusal, Severity, Trace, Persona |
 
 ### 9.3 Context map
 
@@ -537,7 +537,7 @@ These are PRD §19 risks elevated to plan-level mitigations. Mitigations are sch
 | R-1 | Coupling-matrix tuning produces unrealistic timing | Plan A | Hours 4–6: anchor `α_i` and Weibull params to literature ranges in `docs/refs/`; iterate against the Stressed scenario timing. Hour 14: dry-run check that all 3 cascades resolve in 10-h sim. |
 | R-2 | PINN training unstable / slow | Plan A | Hour 6: smoke-train tiny PINN first; if loss diverges by hour 7, swap to learned-regressor surrogate (frozen scikit-learn `MLPRegressor`). Physics narrative still holds for rule-based 5/6. |
 | R-3 | PyLate index too slow | Plan B | Hour 11: benchmark NFR-4. If p95 > 200 ms, fall back to Voyage/OpenAI dense embeddings — same `late_interaction_search` schema. |
-| R-4 | GA fitness landscape ugly | Plan B | Hour 9: visual inspection of the fitness curve. If jagged, swap to Optuna TPE — keep threshold-policy semantics. |
+| R-4 | GA fitness landscape ugly | Plan B | Hour 9: visual inspection of the fitness curve. First tune the DEAP island GA (seed bank, migration, elitism, random immigrants, diversity rescue, early stopping). If still jagged, compare against Optuna TPE while keeping threshold-policy semantics. |
 | R-5 | Live sim too slow | Plan B | Pre-run all 9 scenarios before demo. Live mode is the *second* demo step (NFR-9). 10× replay built into the dashboard from hour 6. |
 | R-6 | Agent hallucinates | Plan C | Pydantic citation validator (hour 6), adversarial fabricated-citation tests (hour 7), DeepEval CI gate (hour 13). Three layers; one must catch every case. |
 | R-7 | Demo Wi-Fi blocks API access | Plan C + Plan B | Cache OpenWeather data offline (Plan B, hour 3). Pre-record canned Anthropic responses for the canned demo (Plan C, Sat morning). Phone hotspot tethered as backup. Live mode disabled if both fail. |

@@ -27,7 +27,7 @@ interface WhatIfFormProps {
 }
 
 function WhatIfForm({ onSubmit, loading, className }: WhatIfFormProps) {
-  const [runId, setRunId] = useState('barcelona-01')
+  const [runId, setRunId] = useState('barcelona-humid-none-seed0042')
   const [branchT, setBranchT] = useState(30)
   const [altAction, setAltAction] = useState(ALT_ACTIONS[0])
 
@@ -44,7 +44,11 @@ function WhatIfForm({ onSubmit, loading, className }: WhatIfFormProps) {
           onChange={(e) => setRunId(e.target.value)}
           className='w-full bg-transparent font-mono text-[11px] text-muted-foreground outline-none'
         >
-          {['barcelona-01', 'phoenix-02', 'dark-twin-00'].map((r) => (
+          {[
+            'barcelona-humid-none-seed0042',
+            'phoenix-dry-none-seed0042',
+            'stressed-none-seed0042',
+          ].map((r) => (
             <option key={r} value={r}>
               {r}
             </option>

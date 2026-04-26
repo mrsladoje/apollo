@@ -15,7 +15,7 @@ The judging surface is also unusual. HP judges will look at the repo. A `histori
 
 ## Decision
 
-Persist the historian to a single **SQLite** file (`historian.db`), accessed via Python's stdlib `sqlite3` driver with WAL mode enabled for concurrent reads during writes. Schema follows PRD §14: `runs`, `drivers`, `component_states`, `maintenance_events`, `obituaries`, `forecasts`, with composite primary keys on `(run_id, t)` and `(run_id, t, component_id)` and explicit indexes on `(run_id, component_id, t)` to match the agent's typical query patterns. JSON-bag columns (`metrics_json`, `config_json`, `citations_json`) hold component-specific or evolving fields without schema churn.
+Persist the historian to a single **SQLite** file (`historian.db`), accessed via Python's stdlib `sqlite3` driver with WAL mode enabled for concurrent reads during writes. Schema follows PRD §14 plus ADR-012's counterfactual checkpoint sidecar: `runs`, `drivers`, `component_states`, `maintenance_events`, `obituaries`, `forecasts`, and `checkpoints`, with composite primary keys on `(run_id, t)`, `(run_id, t, component_id)`, and checkpoint `(run_id, t)` and explicit indexes on `(run_id, component_id, t)` to match the agent's typical query patterns. JSON-bag columns (`metrics_json`, `config_json`, `citations_json`) hold component-specific or evolving fields without schema churn.
 
 ## Alternatives Considered
 

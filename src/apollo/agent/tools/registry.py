@@ -7,7 +7,6 @@ native and emits a ``ChartSpec`` the React frontend renders inline.
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 from typing import Any, Callable, Optional
@@ -73,6 +72,8 @@ class ToolSchema(BaseModel):
 # -----------------------------------------------------------------------------
 
 def _backend() -> str:
+    if os.environ.get("USE_MOCKS", "").lower() in {"1", "true", "yes", "on", "mock"}:
+        return "mock"
     return os.environ.get("APOLLO_TOOLS_BACKEND", "auto").lower()
 
 
@@ -80,8 +81,10 @@ def _call_query_historian(args: QueryHistorianArgs):
     backend = _backend()
     if backend == "mock":
         from apollo.mocks.tool_mocks import query_historian as fn
-        return fn(args.run_id, args.component.value,
-                  [args.time_range[0].timestamp(), args.time_range[1].timestamp()])
+        return [
+            r.model_dump(mode="json")
+            for r in fn(args.run_id, args.component, args.time_range)
+        ]
     # default: route through sim.contracts (which itself honors HISTORIAN_BACKEND)
     from sim.contracts import query_historian as fn
     return [r.model_dump(mode="json") for r in fn(args.run_id, args.component, args.time_range)]
@@ -91,7 +94,10 @@ def _call_late_interaction_search(args: LateInteractionSearchArgs):
     backend = _backend()
     if backend == "mock":
         from apollo.mocks.tool_mocks import late_interaction_search as fn
-        return fn(args.query, args.run_id)
+        return [
+            r.model_dump(mode="json")
+            for r in fn(args.query, args.run_id, args.top_k)
+        ]
     from sim.contracts import late_interaction_search as fn
     return [r.model_dump(mode="json") for r in fn(args.query, args.run_id, args.top_k)]
 
@@ -109,8 +115,11 @@ def _call_run_counterfactual(args: RunCounterfactualArgs):
     backend = _backend()
     if backend == "mock":
         from apollo.mocks.tool_mocks import run_counterfactual as fn
-        action = args.alternate_action.get("action", json.dumps(args.alternate_action))
-        return fn(args.run_id, args.branch_t.timestamp(), action)
+        return fn(
+            args.run_id,
+            args.branch_t,
+            args.alternate_action,
+        ).model_dump(mode="json")
     from sim.contracts import run_counterfactual as fn
     res = fn(args.run_id, args.branch_t, args.alternate_action)
     return res.model_dump(mode="json")
