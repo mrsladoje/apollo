@@ -70,11 +70,9 @@ export function UniversePanel({
     }
   }
 
-  const isDarkTwin = universeId === 'dark-twin'
-
   return (
     <div className={cn('flex flex-col gap-4 min-w-0', className)}>
-      <UniverseHeader label={label} t={t} isDarkTwin={isDarkTwin} />
+      <UniverseHeader universeId={universeId} label={label} t={t} />
       <MasterChart chartData={chartData} failures={failures} />
       {components.length > 0 && <HealthBarList components={components} />}
       <ObitList obits={obituaries} />

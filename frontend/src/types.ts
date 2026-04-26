@@ -127,7 +127,7 @@ export const COMPONENTS: ComponentId[] = [
 ]
 
 export const UNIVERSES: Array<{ id: UniverseId; label: string }> = [
-  { id: 'dark-twin', label: 'Universe A — Dark Twin' },
-  { id: 'fixed-schedule', label: 'Universe B — Fixed Schedule' },
-  { id: 'apollo', label: 'Universe C — Apollo (AI)' },
+  { id: 'dark-twin', label: 'Dark Twin' },
+  { id: 'fixed-schedule', label: 'Fixed Schedule' },
+  { id: 'apollo', label: 'Apollo (AI)' },
 ]
