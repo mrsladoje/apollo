@@ -13,6 +13,7 @@ import statistics
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -237,25 +238,51 @@ def run(
     seeds: int = 1,
     limit: int | None = None,
     configs: tuple[str, ...] = ("vanilla_opus_4_7", "vanilla_gemma_4_31b", "gepa_gemma"),
+    parallelism: int = 1,
     write: bool = True,
 ) -> dict[str, Any]:
     items = load_tool_use_items(split=split, limit=limit)
+    seed_results: dict[str, list[dict[str, Any]]] = {name: [] for name in configs}
+
+    jobs = [(name, seed) for name in configs for seed in range(seeds)]
+    if parallelism > 1 and len(jobs) > 1:
+        with ThreadPoolExecutor(max_workers=parallelism) as pool:
+            futures = {
+                pool.submit(_eval_config_seed, name, seed, items): (name, seed)
+                for name, seed in jobs
+            }
+            for future in as_completed(futures):
+                name, _seed = futures[future]
+                seed_results[name].append(future.result())
+    else:
+        for name, seed in jobs:
+            seed_results[name].append(_eval_config_seed(name, seed, items))
+
     rows: list[dict[str, Any]] = []
     for name in configs:
-        seed_rows = []
-        for seed in range(seeds):
-            metrics = _eval(_client(name), items)
-            metrics["seed"] = seed
-            seed_rows.append(metrics)
+        seed_rows = sorted(seed_results[name], key=lambda row: int(row["seed"]))
         aggregate = _aggregate(seed_rows)
         aggregate["config"] = name
         aggregate["runs"] = seed_rows
         rows.append(aggregate)
-    payload = {"eval": "tests/eval/tool_use_set.json", "split": split, "n_items": len(items), "seeds": seeds, "rows": rows}
+    payload = {
+        "eval": "tests/eval/tool_use_set.json",
+        "split": split,
+        "n_items": len(items),
+        "seeds": seeds,
+        "parallelism": parallelism,
+        "rows": rows,
+    }
     if write:
         RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
         RESULTS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return payload
+
+
+def _eval_config_seed(name: str, seed: int, items: list[dict[str, Any]]) -> dict[str, Any]:
+    metrics = _eval(_client(name), items)
+    metrics["seed"] = seed
+    return metrics
 
 
 def check() -> int:
@@ -332,6 +359,12 @@ def main() -> int:
     parser.add_argument("--seeds", type=int, default=1)
     parser.add_argument("--limit", type=int)
     parser.add_argument(
+        "--parallelism",
+        type=int,
+        default=int(os.environ.get("COMPARISON_PARALLELISM", "1")),
+        help="Parallel config/seed workers for live comparison runs.",
+    )
+    parser.add_argument(
         "--configs",
         nargs="+",
         default=["vanilla_opus_4_7", "vanilla_gemma_4_31b", "gepa_gemma"],
@@ -348,6 +381,7 @@ def main() -> int:
                 seeds=args.seeds,
                 limit=args.limit,
                 configs=tuple(args.configs),
+                parallelism=args.parallelism,
                 write=not args.no_write,
             ),
             indent=2,

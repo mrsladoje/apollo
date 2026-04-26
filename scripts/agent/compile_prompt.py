@@ -47,7 +47,7 @@ def _load_split() -> tuple[list[dict], list[dict]]:
     return load_tool_use_items(split="train"), load_tool_use_items(split="holdout")
 
 
-def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires DSPy + live models
+def _real_compile(max_metric_calls: int, num_threads: int) -> dict:  # pragma: no cover - requires DSPy + live models
     import dspy  # type: ignore
     from dspy.teleprompt import GEPA  # type: ignore
     from dspy.teleprompt.gepa.gepa import ScoreWithFeedback  # type: ignore
@@ -246,7 +246,7 @@ def _real_compile(max_metric_calls: int) -> dict:  # pragma: no cover - requires
         track_stats=True,
         track_best_outputs=True,
         log_dir=str(LOG_DIR),
-        num_threads=1,
+        num_threads=num_threads,
     )
     optimized = optimizer.compile(student=student_module, trainset=trainset, valset=valset)
     compiled_text = _merge_with_seed_prompt(_extract_compiled_prompt(optimized))
@@ -291,6 +291,12 @@ def _simulated_compile() -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-metric-calls", type=int, default=150)
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=int(os.environ.get("GEPA_NUM_THREADS", "4")),
+        help="Parallel evaluator workers for GEPA train/val examples.",
+    )
     parser.add_argument("--force-simulated", action="store_true")
     args = parser.parse_args()
 
@@ -302,7 +308,7 @@ def main() -> int:
 
         os.environ["GEMMA_API_BASE"]
         os.environ["GEMMA_API_KEY"]
-        result = _real_compile(args.max_metric_calls)
+        result = _real_compile(args.max_metric_calls, args.num_threads)
     except Exception as exc:  # pragma: no cover
         if os.environ.get("APOLLO_ALLOW_SIMULATED_GEPA") == "1":
             print(f"[compile_prompt] real GEPA unavailable ({exc}); falling back to simulated compile.")
@@ -320,6 +326,7 @@ def main() -> int:
         "started_at": datetime.utcnow().isoformat() + "Z",
         "wall_clock_s": round(time.time() - started, 2),
         "max_metric_calls": args.max_metric_calls,
+        "num_threads": args.num_threads,
         "simulated": result["simulated"],
         "eval_path": str(EVAL_PATH.relative_to(REPO_ROOT)),
         "metric": "tool_selection+schema_args+tool_execution+refusal",
