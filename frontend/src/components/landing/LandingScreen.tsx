@@ -7,8 +7,8 @@ interface LandingScreenProps {
   onAsk: () => void
 }
 
-const ASCII_FADE_OUT_AT = 1800
-const HEADLINE_DELAY = 3.1
+const ASCII_FADE_OUT_AT = 1200
+const HEADLINE_DELAY = 2.1
 
 export function LandingScreen({ onAsk }: LandingScreenProps) {
   const [logoVisible, setLogoVisible] = useState(true)
@@ -164,7 +164,7 @@ export function LandingScreen({ onAsk }: LandingScreenProps) {
           style={{
             position: 'absolute',
             left: '50%',
-            top: '50%',
+            top: '44%',
             transform: 'translate(-50%, -50%)',
             width: 'min(960px, 100%)',
             aspectRatio: '1024 / 722',
@@ -178,7 +178,7 @@ export function LandingScreen({ onAsk }: LandingScreenProps) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{
               duration: 1.2,
-              delay: 1.9,
+              delay: 0.9,
               ease: [0.22, 0.61, 0.36, 1],
             }}
           >
