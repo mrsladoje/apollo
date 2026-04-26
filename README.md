@@ -284,6 +284,26 @@ Each rejection has a "reconsider if…" clause documenting the post-hackathon ro
 
 ---
 
+## 🧬 GEPA: what we actually measured
+
+The full ADR-022 pipeline is wired end-to-end — **DSPy GEPA** with **Gemma 4 31B** as the student LM, **Claude Opus 4.7** (via the `claude` CLI) as the reflection LM, and a tool-use eval that scores Apollo's five tools on tool choice, schema-valid args, execution, refusal correctness, citation behavior, and grounded answer quality. The compile path refuses fake/simulated GEPA unless explicitly allowed; the compiled artifact lives at `config/agent.system_prompt.gepa.txt`. Runtime hardening (dark-twin aliases, Apollo/fixed/dark-twin policy comparison, run-level plotting, refusal fallbacks) was added where the eval surfaced Gemma weaknesses.
+
+The saved comparison currently reflects a **10-item smoke run**, not the expanded final benchmark. On that run, GEPA-Gemma and vanilla Gemma tied on overall pass rate, but GEPA modestly improved the grounding signals that matter most:
+
+| Metric | Vanilla Gemma | GEPA Gemma | Δ |
+| --- | --- | --- | --- |
+| Pass rate | 0.70 | 0.70 | ±0 |
+| Faithfulness | 0.670 | **0.688** | +0.018 |
+| Missing required citations | 2 | **1** | −1 |
+| Citation resolve rate | 0.125 | **0.333** | +0.208 |
+| Avg latency | 30.3 s | **23.6 s** | −6.7 s |
+
+**What this supports.** A real, non-simulated GEPA compile produced a Gemma prompt with measurably better citation grounding and lower latency than vanilla Gemma — early evidence that the optimizer is doing the work the ADR claims.
+
+**What it does *not* yet support.** The "GEPA-Gemma ≥ vanilla Opus" demo-gate target is **not proven** on this 10-item run. The expanded, parallelized benchmark is staged but unfinished; until it completes, the defensible claim is *"early evidence of improved grounding,"* not *"closes the gap to frontier."*
+
+---
+
 ## 🪪 Honest disclosures
 
 - We do **not** claim our parameters match a real HP Metal Jet S100. Each value falls inside a published range for the analogous mechanism in the analogous component class; specific point estimates are synthetic and disclosed as such ([ADR-006 §"Disclosed assumptions"](docs/adr/ADR-006-three-failure-model-families.md)).
