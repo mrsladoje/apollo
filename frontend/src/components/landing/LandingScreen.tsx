@@ -178,7 +178,7 @@ export function LandingScreen({ onAsk }: LandingScreenProps) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{
               duration: 1.2,
-              delay: 0.9,
+              delay: 1.15,
               ease: [0.22, 0.61, 0.36, 1],
             }}
           >
