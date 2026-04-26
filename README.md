@@ -1,7 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 -->
 
 ```
-                    .                      .
          .            *        .       .         .       *
     *          .            .                .
                           ___
@@ -17,7 +16,7 @@
    | |_| | | |_) | | | || |    | |   | | | |
    |  _  | |  __/| |_| || |___ | |___| |_| |
    |_| |_| |_|    \___/ |_____||_____|\___/
-        ~ integrated dev stack — backend + frontend ~
+        ~ your HP S100 digital twin ~
 ```
 
 # Apollo  🛰️
