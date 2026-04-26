@@ -52,6 +52,7 @@ def _normalize_action(req: WhatIfRequest) -> dict[str, Any]:
         "swap_blade": ComponentId.BLADE,
         "clean_nozzle": ComponentId.NOZZLE,
         "replace_insulation": ComponentId.INSULATION,
+        "fix_resistor": ComponentId.RESISTOR,
     }
     component = mapping.get(str(action_name))
     if component is None:

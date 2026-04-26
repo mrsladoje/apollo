@@ -12,6 +12,7 @@ interface WhatIfPanelProps {
 export function WhatIfPanel({ className }: WhatIfPanelProps) {
   const { result, loading, run } = useWhatIf()
   const [lastBranchT, setLastBranchT] = useState(30)
+  const [open, setOpen] = useState(false)
 
   function handleSubmit(runId: string, branchT: number, altAction: string) {
     setLastBranchT(branchT)
@@ -20,9 +21,13 @@ export function WhatIfPanel({ className }: WhatIfPanelProps) {
 
   return (
     <div className={cn('space-y-5', className)}>
-      <WhatIfHeader />
-      <WhatIfForm onSubmit={handleSubmit} loading={loading} />
-      {result && <CounterfactualChart result={result} branchT={lastBranchT} />}
+      <WhatIfHeader open={open} onToggle={() => setOpen((v) => !v)} />
+      {open && (
+        <div className='space-y-5'>
+          <WhatIfForm onSubmit={handleSubmit} loading={loading} />
+          {result && <CounterfactualChart result={result} branchT={lastBranchT} />}
+        </div>
+      )}
     </div>
   )
 }

@@ -71,6 +71,7 @@ def _action_component(action: dict) -> ComponentId:
         "swap_blade": ComponentId.BLADE,
         "clean_nozzle": ComponentId.NOZZLE,
         "replace_insulation": ComponentId.INSULATION,
+        "fix_resistor": ComponentId.RESISTOR,
     }
     return mapping.get(action_name, ComponentId.BLADE)
 

@@ -6,6 +6,7 @@ const ALT_ACTIONS = [
   'swap_blade',
   'clean_nozzle',
   'replace_insulation',
+  'fix_resistor',
   'reduce_temperature',
   'increase_maintenance',
 ]
