@@ -1,33 +1,397 @@
 {
+  "eval": "tests/eval/tool_use_set.json",
   "rows": [
     {
-      "n": 30,
-      "n_grounded": 24,
-      "n_unanswerable": 6,
-      "faithfulness_avg": 0.746,
+      "n": 10,
+      "pass_rate": 0.6,
+      "tool_accuracy": 1.0,
+      "valid_tool_args": 1.0,
+      "answer_contains_rate": 1.0,
+      "faithfulness_avg": 0.657,
       "hallucination_count": 0,
-      "refusals_correct": 5,
-      "refusals_total": 6,
+      "missing_required_citation_count": 1,
+      "citation_resolve_rate": 0.375,
+      "refusals_correct": 4,
+      "refusals_total": 4,
+      "latency_p50_s": 24.026,
+      "latency_avg_s": 20.751,
+      "items": [
+        {
+          "id": "tool-query-nozzle",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "barcelona-humid-ai-seed0042",
+            "component": "nozzle",
+            "time_range": [
+              "2026-04-25T08:00:00",
+              "2026-04-25T08:00:00"
+            ]
+          },
+          "faithfulness": 1.0,
+          "citations_resolved": "1/1",
+          "passed": true
+        },
+        {
+          "id": "tool-search-cascade",
+          "expected_tool": "late_interaction_search",
+          "selected_tool": "late_interaction_search",
+          "args": {
+            "query": "thermal cascade in barcelona-humid-none-seed0042",
+            "run_id": "barcelona-humid-none-seed0042",
+            "top_k": 5
+          },
+          "faithfulness": 0.604,
+          "citations_resolved": "5/5",
+          "passed": true
+        },
+        {
+          "id": "tool-compare-universes",
+          "expected_tool": "compare_runs",
+          "selected_tool": "compare_runs",
+          "args": {
+            "run_ids": [
+              "barcelona-humid-ai-seed0042",
+              "barcelona-humid-fixed-seed0042",
+              "barcelona-humid-none-seed0042"
+            ],
+            "metric": "avg_health"
+          },
+          "faithfulness": 0.28,
+          "citations_resolved": "0/3",
+          "passed": false
+        },
+        {
+          "id": "tool-counterfactual-insulation",
+          "expected_tool": "run_counterfactual",
+          "selected_tool": "run_counterfactual",
+          "args": {
+            "run_id": "barcelona-humid-none-seed0042",
+            "branch_t": "2026-04-26T04:00:00",
+            "alternate_action": {
+              "action": "replace",
+              "component_id": "insulation"
+            }
+          },
+          "faithfulness": 0.382,
+          "citations_resolved": "0/3",
+          "passed": false
+        },
+        {
+          "id": "tool-plot-nozzle-history",
+          "expected_tool": "plot_component_history",
+          "selected_tool": "plot_component_history",
+          "args": {
+            "run_id": "phoenix-dry-ai-seed0042",
+            "component": "nozzle"
+          },
+          "faithfulness": 0.304,
+          "citations_resolved": "0/4",
+          "passed": false
+        },
+        {
+          "id": "tool-query-bearing",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "stressed-none-seed0042",
+            "component": "motor",
+            "time_range": [
+              "2024-01-01T00:00:00",
+              "2024-12-31T23:59:59"
+            ]
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "refuse-weather",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-component",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-run",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-missing-metric",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        }
+      ],
       "config": "vanilla_opus_4_7"
     },
     {
-      "n": 30,
-      "n_grounded": 24,
-      "n_unanswerable": 6,
-      "faithfulness_avg": 0.746,
+      "n": 10,
+      "pass_rate": 0.7,
+      "tool_accuracy": 1.0,
+      "valid_tool_args": 1.0,
+      "answer_contains_rate": 0.9,
+      "faithfulness_avg": 0.67,
       "hallucination_count": 0,
-      "refusals_correct": 5,
-      "refusals_total": 6,
+      "missing_required_citation_count": 2,
+      "citation_resolve_rate": 0.125,
+      "refusals_correct": 4,
+      "refusals_total": 4,
+      "latency_p50_s": 25.377,
+      "latency_avg_s": 30.312,
+      "items": [
+        {
+          "id": "tool-query-nozzle",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "barcelona-humid-ai-seed0042",
+            "component": "nozzle",
+            "time_range": [
+              "2026-04-25T08:00:00",
+              "2026-04-25T08:00:01"
+            ]
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-search-cascade",
+          "expected_tool": "late_interaction_search",
+          "selected_tool": "late_interaction_search",
+          "args": {
+            "query": "thermal cascade",
+            "run_id": "barcelona-humid-none-seed0042",
+            "top_k": 5
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-compare-universes",
+          "expected_tool": "compare_runs",
+          "selected_tool": "compare_runs",
+          "args": {
+            "run_ids": [
+              "barcelona-humid-ai-seed0042",
+              "barcelona-humid-fixed-seed0042",
+              "barcelona-humid-none-seed0042"
+            ],
+            "metric": "avg_health"
+          },
+          "faithfulness": 0.835,
+          "citations_resolved": "0/3",
+          "passed": true
+        },
+        {
+          "id": "tool-counterfactual-insulation",
+          "expected_tool": "run_counterfactual",
+          "selected_tool": "run_counterfactual",
+          "args": {
+            "run_id": "barcelona-humid-none-seed0042",
+            "branch_t": "2026-04-25T12:00:00",
+            "alternate_action": {
+              "action": "replace",
+              "component_id": "insulation"
+            }
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-plot-nozzle-history",
+          "expected_tool": "plot_component_history",
+          "selected_tool": "plot_component_history",
+          "args": {
+            "run_id": "phoenix-dry-ai-seed0042",
+            "component": "nozzle"
+          },
+          "faithfulness": 1.0,
+          "citations_resolved": "0/4",
+          "passed": true
+        },
+        {
+          "id": "tool-query-bearing",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "stressed-none-seed0042",
+            "component": "motor",
+            "time_range": [
+              "2000-01-01T00:00:00",
+              "2100-01-01T00:00:00"
+            ]
+          },
+          "faithfulness": 0.862,
+          "citations_resolved": "1/1",
+          "passed": true
+        },
+        {
+          "id": "refuse-weather",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-component",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-run",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-missing-metric",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        }
+      ],
       "config": "vanilla_gemma_4_31b"
     },
     {
-      "n": 30,
-      "n_grounded": 24,
-      "n_unanswerable": 6,
-      "faithfulness_avg": 0.746,
+      "n": 10,
+      "pass_rate": 0.7,
+      "tool_accuracy": 1.0,
+      "valid_tool_args": 1.0,
+      "answer_contains_rate": 0.9,
+      "faithfulness_avg": 0.688,
       "hallucination_count": 0,
-      "refusals_correct": 5,
-      "refusals_total": 6,
+      "missing_required_citation_count": 1,
+      "citation_resolve_rate": 0.333,
+      "refusals_correct": 4,
+      "refusals_total": 4,
+      "latency_p50_s": 19.108,
+      "latency_avg_s": 23.571,
+      "items": [
+        {
+          "id": "tool-query-nozzle",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "barcelona-humid-ai-seed0042",
+            "component": "nozzle",
+            "time_range": [
+              "2026-04-25T08:00:00",
+              "2026-04-25T08:00:01"
+            ]
+          },
+          "faithfulness": 1.0,
+          "citations_resolved": "1/1",
+          "passed": true
+        },
+        {
+          "id": "tool-search-cascade",
+          "expected_tool": "late_interaction_search",
+          "selected_tool": "late_interaction_search",
+          "args": {
+            "query": "thermal cascade",
+            "run_id": "barcelona-humid-none-seed0042",
+            "top_k": 5
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-compare-universes",
+          "expected_tool": "compare_runs",
+          "selected_tool": "compare_runs",
+          "args": {
+            "run_ids": [
+              "barcelona-humid-ai-seed0042",
+              "barcelona-humid-fixed-seed0042",
+              "barcelona-humid-none-seed0042"
+            ],
+            "metric": "avg_health"
+          },
+          "faithfulness": 0.0,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-counterfactual-insulation",
+          "expected_tool": "run_counterfactual",
+          "selected_tool": "run_counterfactual",
+          "args": {
+            "run_id": "barcelona-humid-none-seed0042",
+            "branch_t": "2026-04-25T12:00:00",
+            "alternate_action": {
+              "action": "replace",
+              "component_id": "insulation"
+            }
+          },
+          "faithfulness": 0.083,
+          "citations_resolved": "0/0",
+          "passed": false
+        },
+        {
+          "id": "tool-plot-nozzle-history",
+          "expected_tool": "plot_component_history",
+          "selected_tool": "plot_component_history",
+          "args": {
+            "run_id": "phoenix-dry-ai-seed0042",
+            "component": "nozzle"
+          },
+          "faithfulness": 1.0,
+          "citations_resolved": "0/4",
+          "passed": true
+        },
+        {
+          "id": "tool-query-bearing",
+          "expected_tool": "query_historian",
+          "selected_tool": "query_historian",
+          "args": {
+            "run_id": "stressed-none-seed0042",
+            "component": "motor",
+            "time_range": [
+              "2000-01-01T00:00:00",
+              "2100-01-01T00:00:00"
+            ]
+          },
+          "faithfulness": 0.8,
+          "citations_resolved": "1/1",
+          "passed": true
+        },
+        {
+          "id": "refuse-weather",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-component",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-unknown-run",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        },
+        {
+          "id": "refuse-missing-metric",
+          "expected_tool": "REFUSAL",
+          "selected_tool": "REFUSAL",
+          "passed": true
+        }
+      ],
       "config": "gepa_gemma"
     }
   ]

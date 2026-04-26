@@ -25,8 +25,11 @@ COMPILED = REPO_ROOT / "config" / "agent.system_prompt.gepa.txt"
 LOG_PATH = REPO_ROOT / "docs" / "eval" / "gepa_compile_log.json"
 
 TOOL_USE_REFINEMENTS = """\
+During the tool-selection phase, obey the JSON router contract even though the final Apollo response is structured separately.
 Return only one JSON object for tool selection: {"tool": "...", "args": {...}}.
+Do not include chain-of-thought, examples, markdown, or intermediate arg-only JSON before the final router object.
 Known components are blade, motor, nozzle, resistor, heater, insulation. Refuse unknown components such as microwave, bearing temperature, or binder viscosity.
+Treat "motor bearing" as the motor component, not as an unknown component.
 Refuse unknown runs such as run-9999 and off-topic questions such as weather, stocks, music, or recommendations.
 Direct health/status/value for one run and component -> query_historian.
 Why/cascade/explain rows -> late_interaction_search.

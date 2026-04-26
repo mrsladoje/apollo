@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "started_at": "2026-04-26T02:50:48.960450Z",
-  "wall_clock_s": 569.8,
+  "started_at": "2026-04-26T03:26:36.881836Z",
+  "wall_clock_s": 2353.36,
   "max_metric_calls": 150,
   "simulated": false,
   "eval_path": "tests/eval/tool_use_set.json",

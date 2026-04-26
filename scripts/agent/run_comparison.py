@@ -112,15 +112,21 @@ class ModelClient:
 def _json_from_text(text: str) -> dict[str, Any]:
     cleaned = re.sub(r"```(?:json)?|```", "", text).strip()
     decoder = json.JSONDecoder()
+    first: dict[str, Any] | None = None
     for i, ch in enumerate(cleaned):
         if ch != "{":
             continue
         try:
             obj, _ = decoder.raw_decode(cleaned[i:])
             if isinstance(obj, dict):
-                return obj
+                if first is None:
+                    first = obj
+                if "tool" in obj and "args" in obj:
+                    return obj
         except json.JSONDecodeError:
             continue
+    if first is not None:
+        return first
     raise ValueError(f"no JSON object in model output: {text[:300]}")
 
 
@@ -172,9 +178,10 @@ def _normalize_args(tool: str, args: dict[str, Any], item: dict) -> dict[str, An
     elif tool == "run_counterfactual":
         if "run_id" not in args and item.get("expected_run_id"):
             args["run_id"] = item["expected_run_id"]
-        args["branch_t"] = _strip_utc_suffix(
-            str(args.get("branch_t") or (SIM_START_TIME + timedelta(hours=4)).isoformat())
-        )
+        branch_t = _strip_utc_suffix(str(args.get("branch_t") or ""))
+        if "hour 4" in branch_t.lower() or not branch_t.startswith("2026-"):
+            branch_t = (SIM_START_TIME + timedelta(hours=4)).isoformat()
+        args["branch_t"] = branch_t
         args.setdefault(
             "alternate_action",
             {"action": "MAINTENANCE", "component_id": item.get("expected_component", "nozzle")},
@@ -233,6 +240,7 @@ def _resolve_answer_citations(answer: dict) -> tuple[int, int]:
 def _eval(client: ModelClient, items: list[dict]) -> dict:
     faiths: list[float] = []
     hallucinations = 0
+    missing_required_citations = 0
     citation_total = 0
     citation_resolved = 0
     refusals_correct = 0
@@ -292,7 +300,7 @@ def _eval(client: ModelClient, items: list[dict]) -> dict:
             if requires_citation and total and ok != total:
                 hallucinations += total - ok
             elif requires_citation and not total:
-                hallucinations += 1
+                missing_required_citations += 1
 
             contains = all(
                 str(bit).lower() in (text + json.dumps(answer, default=str)).lower()
@@ -321,6 +329,7 @@ def _eval(client: ModelClient, items: list[dict]) -> dict:
         "answer_contains_rate": round(answer_contains_ok / n, 3),
         "faithfulness_avg": round(sum(faiths) / len(faiths), 3) if faiths else 0.0,
         "hallucination_count": hallucinations,
+        "missing_required_citation_count": missing_required_citations,
         "citation_resolve_rate": round(citation_resolved / citation_total, 3) if citation_total else 0.0,
         "refusals_correct": refusals_correct,
         "refusals_total": refusals_total,
