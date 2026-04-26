@@ -46,4 +46,10 @@ Allows for proper testing, policy comparison, counterfactual replay, etc etc...
 - Finds band size where 95% of predictions will land
 - EnbPi batching (30 mins since we need the data to be exchangable (that ordering doesn't affect results, but minute 32 is closely coupled to minute 31 in our system))
 
+## PINN (Physics-Informed Neural Networks)
+
+- We add a thermal law to the loss function and therefore penalize breaking physics laws - so we get a neural net that respects the laws of physics
+- Gets graded on TWO thigs - how well is the answer and does it break the laws of physics?
+- We combine it with Coffin-Manson for the heater component
+
 
