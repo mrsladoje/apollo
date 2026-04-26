@@ -170,72 +170,70 @@ async def _historian_events(
         })
 
     failed_emitted: set[str] = set()
-    tick_index = 0
     sim_start = timestamps[0]
+    from datetime import datetime
 
-    for t_iso in timestamps:
-        # Throttle: every Nth tick keeps the stream readable for long runs.
-        if tick_index % every_n_ticks != 0:
-            tick_index += 1
-            continue
-        tick_index += 1
+    for tick_index, t_iso in enumerate(timestamps):
+        t_offset = int(
+            (datetime.fromisoformat(t_iso) - datetime.fromisoformat(sim_start)).total_seconds() // 60
+        )
+        emit_tick = (tick_index % every_n_ticks == 0)
 
-        state_rows = conn.execute(
-            "SELECT component_id, health, status, metrics_json "
-            "FROM component_states WHERE run_id=? AND t=? "
-            "ORDER BY component_id ASC",
-            (run_id, t_iso),
-        ).fetchall()
+        if emit_tick:
+            state_rows = conn.execute(
+                "SELECT component_id, health, status, metrics_json "
+                "FROM component_states WHERE run_id=? AND t=? "
+                "ORDER BY component_id ASC",
+                (run_id, t_iso),
+            ).fetchall()
 
-        states = []
-        for r in state_rows:
-            try:
-                metrics = json.loads(r["metrics_json"] or "{}")
-            except json.JSONDecodeError:
-                metrics = {}
-            states.append({
-                "component_id": r["component_id"],
-                "health": float(r["health"]),
-                "status": r["status"],
-                "metrics": metrics,
-            })
+            states = []
+            for r in state_rows:
+                try:
+                    metrics = json.loads(r["metrics_json"] or "{}")
+                except json.JSONDecodeError:
+                    metrics = {}
+                states.append({
+                    "component_id": r["component_id"],
+                    "health": float(r["health"]),
+                    "status": r["status"],
+                    "metrics": metrics,
+                })
 
-        # t is the offset in minutes from the run's first persisted timestamp.
-        # The frontend reducer expects an integer-ish minute count.
-        from datetime import datetime
-        t_offset = int((datetime.fromisoformat(t_iso) - datetime.fromisoformat(sim_start)).total_seconds() // 60)
-
-        yield json.dumps({
-            "type": "tick",
-            "run_id": run_id,
-            "universe": universe_id,
-            "t": t_offset,
-            "states": states,
-        })
-
-        # Forecasts at this t (one row per component if Plan A persisted it).
-        for fr in conn.execute(
-            "SELECT component_id, horizon_min, point, lower, upper, ci_level "
-            "FROM forecasts WHERE run_id=? AND t=? AND component_id IN (?, ?)",
-            (run_id, t_iso, ComponentId.HEATER.value, ComponentId.NOZZLE.value),
-        ).fetchall():
             yield json.dumps({
-                "type": "forecast",
+                "type": "tick",
                 "run_id": run_id,
                 "universe": universe_id,
                 "t": t_offset,
-                "component": fr["component_id"],
-                "band": {
-                    "component_id": fr["component_id"],
-                    "horizon_min": int(fr["horizon_min"]),
-                    "point": float(fr["point"]),
-                    "lower": float(fr["lower"]),
-                    "upper": float(fr["upper"]),
-                    "ci_level": float(fr["ci_level"]),
-                },
+                "states": states,
             })
 
-        # Failure + obituary at this t.
+            # Forecasts at this t (one row per component if Plan A persisted it).
+            for fr in conn.execute(
+                "SELECT component_id, horizon_min, point, lower, upper, ci_level "
+                "FROM forecasts WHERE run_id=? AND t=? AND component_id IN (?, ?)",
+                (run_id, t_iso, ComponentId.HEATER.value, ComponentId.NOZZLE.value),
+            ).fetchall():
+                yield json.dumps({
+                    "type": "forecast",
+                    "run_id": run_id,
+                    "universe": universe_id,
+                    "t": t_offset,
+                    "component": fr["component_id"],
+                    "band": {
+                        "component_id": fr["component_id"],
+                        "horizon_min": int(fr["horizon_min"]),
+                        "point": float(fr["point"]),
+                        "lower": float(fr["lower"]),
+                        "upper": float(fr["upper"]),
+                        "ci_level": float(fr["ci_level"]),
+                    },
+                })
+
+        # Failure + obituary always fire on the historian tick they actually
+        # land on, even when ``every_n_ticks`` would skip the surrounding tick
+        # emission — otherwise failures on odd-indexed ticks vanish from both
+        # the chart markers and the Failure log.
         for entry in obit_by_t.get(t_iso, []):
             comp = entry["component"]
             if comp in failed_emitted:
@@ -261,10 +259,11 @@ async def _historian_events(
                 }],
             })
 
-        # ``speed`` scales playback (0.2 = 5x slower, 2.0 = 2x faster).
-        scaled_delay = delay / speed if speed > 0 else delay
-        if scaled_delay > 0:
-            await asyncio.sleep(scaled_delay)
+        if emit_tick:
+            # ``speed`` scales playback (0.2 = 5x slower, 2.0 = 2x faster).
+            scaled_delay = delay / speed if speed > 0 else delay
+            if scaled_delay > 0:
+                await asyncio.sleep(scaled_delay)
 
 
 async def _synthetic_events(
