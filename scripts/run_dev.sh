@@ -26,7 +26,7 @@ ${C_YELLOW}                    .                      .${C_RESET}
 ${C_YELLOW}         .            *        .       .         .       *${C_RESET}
 ${C_YELLOW}    *          .            .                .${C_RESET}
 ${C_ORANGE}                          ___${C_RESET}
-${C_ORANGE}                       .-'   '-.${C_RESET}        ${C_DIM}.    *${C_RESET}
+${C_ORANGE}                       .-´   \`-.${C_RESET}        ${C_DIM}.    *${C_RESET}
 ${C_ORANGE}                      /  ${C_YELLOW}.-~-.${C_ORANGE}  \\${C_RESET}    ${C_DIM}.${C_RESET}
 ${C_ORANGE}              .      |  ${C_YELLOW}/     \\${C_ORANGE}  |${C_RESET}     ${C_DIM}*${C_RESET}
 ${C_ORANGE}                     |  ${C_YELLOW}\\     /${C_ORANGE}  |${C_RESET}

@@ -51,7 +51,7 @@ const ROWS: Segment[][] = [
   ],
   [{ text: '                          ___', tone: 'sun' }],
   [
-    { text: "                       .-'   '-.", tone: 'sun' },
+    { text: "                       .-´   `-.", tone: 'sun' },
     { text: '        .    *', tone: 'dim' },
   ],
   [
