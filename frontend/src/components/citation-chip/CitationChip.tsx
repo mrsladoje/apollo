@@ -20,12 +20,23 @@ export function CitationChip({
       type='button'
       onClick={() => onClick?.(citation)}
       className={cn(
-        'inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground transition-colors duration-200',
+        'hover:border-[rgba(0,150,214,0.4)] hover:bg-[rgba(0,150,214,0.05)] hover:text-[#0073A8]',
         className,
       )}
+      style={{
+        borderColor: 'rgb(225 230 236)',
+        background: '#FFFFFF',
+      }}
       title={`run: ${citation.run_id} · ${citation.timestamp}`}
     >
-      <span className='h-1.5 w-1.5 rounded-full bg-current opacity-60' />
+      <span
+        className='h-1.5 w-1.5 rounded-full'
+        style={{
+          background: '#0096D6',
+          boxShadow: '0 0 4px rgba(0,150,214,0.55)',
+        }}
+      />
       {label}
     </button>
   )

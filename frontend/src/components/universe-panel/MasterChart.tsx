@@ -23,6 +23,10 @@ interface MasterChartProps {
   className?: string
 }
 
+const COLOR_LINE = '#0096D6' // HP Blue
+const COLOR_BAND = '#33A8DD' // HP Blue light
+const COLOR_FAILURE = '#DC2626' // Standard alert red
+
 export function MasterChart({
   chartData,
   failures,
@@ -37,12 +41,12 @@ export function MasterChart({
         >
           <defs>
             <linearGradient id='healthGrad' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#3b82f6' stopOpacity={0.15} />
-              <stop offset='95%' stopColor='#3b82f6' stopOpacity={0} />
+              <stop offset='5%' stopColor={COLOR_LINE} stopOpacity={0.22} />
+              <stop offset='95%' stopColor={COLOR_LINE} stopOpacity={0} />
             </linearGradient>
             <linearGradient id='bandGrad' x1='0' y1='0' x2='0' y2='1'>
-              <stop offset='5%' stopColor='#6366f1' stopOpacity={0.08} />
-              <stop offset='95%' stopColor='#6366f1' stopOpacity={0} />
+              <stop offset='5%' stopColor={COLOR_BAND} stopOpacity={0.14} />
+              <stop offset='95%' stopColor={COLOR_BAND} stopOpacity={0} />
             </linearGradient>
           </defs>
           <XAxis dataKey='t' tick={false} axisLine={false} tickLine={false} />
@@ -55,10 +59,19 @@ export function MasterChart({
           />
           <Tooltip
             contentStyle={{
-              background: 'hsl(var(--background))',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: 4,
+              background: 'rgba(255,255,255,0.97)',
+              border: '1px solid rgb(225 230 236)',
+              borderRadius: 8,
               fontSize: 10,
+              fontFamily: '"IBM Plex Mono", monospace',
+              color: '#1A1F2C',
+              boxShadow: '0 8px 24px -10px rgba(15,23,42,0.18)',
+              backdropFilter: 'blur(8px)',
+            }}
+            cursor={{
+              stroke: 'rgba(0,150,214,0.35)',
+              strokeWidth: 1,
+              strokeDasharray: '2 3',
             }}
             labelFormatter={(v) => `t=${v}`}
             formatter={(v) => [`${((v as number) * 100).toFixed(0)}%`]}
@@ -74,8 +87,8 @@ export function MasterChart({
           <Area
             type='monotone'
             dataKey='health'
-            stroke='#3b82f6'
-            strokeWidth={1.5}
+            stroke={COLOR_LINE}
+            strokeWidth={1.6}
             fill='url(#healthGrad)'
             dot={false}
             isAnimationActive={false}
@@ -85,9 +98,10 @@ export function MasterChart({
               key={`${f.component}-${i}`}
               x={f.t_fail}
               y={0.05}
-              r={3}
-              fill='#ef4444'
-              stroke='none'
+              r={3.5}
+              fill={COLOR_FAILURE}
+              stroke='#FFFFFF'
+              strokeWidth={1.4}
             />
           ))}
         </AreaChart>

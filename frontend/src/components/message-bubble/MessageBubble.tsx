@@ -20,7 +20,13 @@ export function MessageBubble({
   if (message.role === 'user') {
     return (
       <div className={cn('flex justify-end', className)}>
-        <p className='max-w-[75%] text-sm text-muted-foreground'>
+        <p
+          className='max-w-[78%] rounded-2xl rounded-tr-sm px-4 py-2 text-[13px] leading-relaxed text-foreground/90'
+          style={{
+            background: 'rgba(0,150,214,0.06)',
+            border: '1px solid rgba(0,150,214,0.16)',
+          }}
+        >
           {message.text}
         </p>
       </div>
@@ -38,7 +44,10 @@ export function MessageBubble({
           <div className='flex items-center gap-2'>
             {message.severity && <SeverityBadge severity={message.severity} />}
             {message.streaming && (
-              <span className='h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60' />
+              <span
+                className='h-1.5 w-1.5 animate-hp-pulse rounded-full'
+                style={{ background: '#0096D6' }}
+              />
             )}
           </div>
 
@@ -48,13 +57,18 @@ export function MessageBubble({
 
           <p
             className={cn(
-              'text-sm leading-relaxed',
+              'text-[13px] leading-relaxed',
               isRefusal ? 'text-muted-foreground' : 'text-foreground',
             )}
           >
             {message.text}
             {message.streaming && (
-              <span className='ml-0.5 animate-pulse'>▋</span>
+              <span
+                className='ml-0.5 animate-hp-pulse'
+                style={{ color: '#0096D6' }}
+              >
+                ▋
+              </span>
             )}
           </p>
 
@@ -70,7 +84,7 @@ export function MessageBubble({
               href={message.trace_url}
               target='_blank'
               rel='noopener noreferrer'
-              className='inline-flex items-center gap-1 text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline'
+              className='hp-link inline-flex items-center gap-1 font-mono text-[10px] tracking-wider text-muted-foreground hover:text-[#0073A8]'
             >
               Trace <ExternalLink className='h-2.5 w-2.5' />
             </a>

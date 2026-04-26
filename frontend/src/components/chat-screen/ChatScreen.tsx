@@ -41,36 +41,42 @@ function FixedChat() {
     <div
       ref={containerRef}
       className={cn(
-        'fixed z-40 bg-background/95 backdrop-blur shadow-xl',
-        // Mobile: full width, flush to bottom, top border only
-        'bottom-0 left-0 right-0 border-t border-border',
-        // Desktop: 40px from bottom, centered, left+right+top borders, no bottom border
-        'sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-10 sm:border sm:border-b-0',
-        'transition-[width] duration-200',
-        // Width: full on mobile, constrained on desktop
+        'fixed z-40',
+        'bottom-0 left-0 right-0 rounded-t-2xl',
+        'sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-8 sm:rounded-full',
+        'transition-[width,border-radius] duration-300 ease-out',
         'w-full',
+        focused && hasMessages && 'sm:rounded-3xl',
         focused
           ? 'sm:w-[min(680px,calc(100vw-32px))]'
           : 'sm:w-[min(520px,calc(100vw-32px))]',
       )}
+      style={{
+        background: 'rgba(255,255,255,0.94)',
+        backdropFilter: 'blur(16px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(140%)',
+        border: '1px solid rgb(225 230 236)',
+        boxShadow:
+          '0 1px 0 rgba(255,255,255,1) inset,' +
+          '0 12px 36px -16px rgba(15,23,42,0.16),' +
+          '0 2px 8px -4px rgba(15,23,42,0.06)',
+      }}
       onFocus={() => setFocused(true)}
     >
-      {/* Messages panel */}
       <div
         className={cn(
-          'overflow-hidden transition-[max-height] duration-300 ease-in-out',
+          'overflow-hidden transition-[max-height] duration-400 ease-in-out',
           hasMessages ? 'max-h-[500px]' : 'max-h-0',
         )}
       >
-        <div className='max-h-[500px] overflow-y-auto px-4 pb-2 pt-4'>
+        <div className='hp-scroll max-h-[500px] overflow-y-auto px-5 pb-3 pt-5'>
           <MessageList messages={messages} />
           <div ref={bottomRef} />
         </div>
-        <div className='border-t border-border' />
+        <div className='hp-divider' />
       </div>
 
-      {/* Input */}
-      <div className='px-4 py-3'>
+      <div className='px-5 py-3'>
         <ChatInput onSubmit={send} disabled={streaming} />
       </div>
     </div>
@@ -80,36 +86,80 @@ function FixedChat() {
 export function ChatScreen({ className }: ChatScreenProps) {
   return (
     <motion.div
-      className={cn(
-        'min-h-screen bg-background text-foreground pb-24',
-        className,
-      )}
-      initial={{ opacity: 0, y: 60 }}
+      className={cn('relative min-h-screen pb-32 text-foreground', className)}
+      initial={{ opacity: 0, y: 32 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
     >
-      <div className='page-container py-8 space-y-8'>
-        {/* Charts section */}
+      <header className='page-container pt-10 pb-8'>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          className='flex items-center justify-between gap-6'
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15, ease: 'easeOut' }}
+          transition={{ duration: 0.5, delay: 0.1, ease: 'easeOut' }}
+        >
+          <div className='flex items-center gap-3'>
+            <span
+              aria-hidden
+              className='inline-block h-2.5 w-2.5 rounded-full'
+              style={{
+                background: '#0096D6',
+                boxShadow: '0 0 0 3px rgba(0,150,214,0.18)',
+              }}
+            />
+            <span
+              className='font-sans text-[11px] font-semibold uppercase tracking-[0.28em]'
+              style={{ color: '#1A1F2C' }}
+            >
+              Apollo
+            </span>
+            <span className='h-3 w-px bg-[rgba(15,23,42,0.16)]' />
+            <span className='font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-muted-foreground'>
+              HP Metal Jet S100
+            </span>
+          </div>
+
+          <span className='hidden font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground/65 sm:block'>
+            Predictive maintenance
+          </span>
+        </motion.div>
+
+        <motion.h1
+          className='mt-8 max-w-[660px] font-display leading-[1.08] tracking-[-0.022em] text-[#1A1F2C]'
+          style={{
+            fontSize: 'clamp(28px, 3.4vw, 42px)',
+            fontWeight: 500,
+          }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.18, ease: 'easeOut' }}
+        >
+          Telemetry, forecasts, and{' '}
+          <span style={{ fontWeight: 600, color: '#0096D6' }}>counterfactual</span>{' '}
+          insight.
+        </motion.h1>
+      </header>
+
+      <div className='page-container space-y-10'>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.26, ease: 'easeOut' }}
         >
           <SimSection />
         </motion.div>
 
-        {/* What-if panel */}
         <motion.div
-          className='border-t border-border pt-8'
-          initial={{ opacity: 0, y: 20 }}
+          className='relative pt-10'
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.25, ease: 'easeOut' }}
+          transition={{ duration: 0.5, delay: 0.36, ease: 'easeOut' }}
         >
+          <span className='hp-divider absolute inset-x-0 top-0' />
           <WhatIfPanel />
         </motion.div>
       </div>
 
-      {/* Fixed chat bar at bottom — same as original but no rounded corners */}
       <FixedChat />
     </motion.div>
   )

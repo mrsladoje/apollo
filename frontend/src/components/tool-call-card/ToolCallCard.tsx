@@ -14,10 +14,15 @@ export function ToolCallCard({ toolCall, className }: ToolCallCardProps) {
   const pending = toolCall.result === null
 
   return (
-    <div className={cn('border-l-2 border-border pl-3', className)}>
+    <div className={cn('relative pl-3', className)}>
+      <span
+        aria-hidden
+        className='pointer-events-none absolute left-0 top-1 bottom-1 w-[2px] rounded-full'
+        style={{ background: 'rgba(0,150,214,0.5)' }}
+      />
       <button
         type='button'
-        className='flex w-full items-center gap-2 text-left'
+        className='flex w-full items-center gap-2 text-left transition-colors hover:text-foreground'
         onClick={() => setOpen((v) => !v)}
       >
         {open ? (
@@ -25,11 +30,14 @@ export function ToolCallCard({ toolCall, className }: ToolCallCardProps) {
         ) : (
           <ChevronRight className='h-3 w-3 text-muted-foreground' />
         )}
-        <span className='font-mono text-[11px] text-muted-foreground'>
+        <span className='font-mono text-[11px] tracking-wide text-muted-foreground'>
           {toolCall.tool}
         </span>
         {pending && (
-          <span className='ml-auto h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400' />
+          <span
+            className='ml-auto h-1.5 w-1.5 animate-hp-pulse rounded-full'
+            style={{ background: '#F59E0B' }}
+          />
         )}
       </button>
 

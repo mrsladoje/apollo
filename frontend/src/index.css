@@ -4,48 +4,57 @@
 
 @layer base {
   :root {
+    /* HP corporate palette — clean white with HP Blue accent (#0096D6) */
     --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --foreground: 220 22% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 220 22% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --popover-foreground: 220 22% 12%;
+    --primary: 199 100% 42%; /* HP Blue #0096D6 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 20% 96%;
+    --secondary-foreground: 220 22% 12%;
+    --muted: 215 18% 96%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 199 70% 95%;
+    --accent-foreground: 220 22% 12%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 18% 90%;
+    --input: 215 18% 90%;
+    --ring: 199 100% 42%;
     --radius: 0.5rem;
+
+    /* Brand tokens for direct use */
+    --hp-blue: #0096d6;
+    --hp-blue-light: #33a8dd;
+    --hp-blue-pale: #5bb8e0;
+    --hp-blue-deep: #0073a8;
+    --hp-navy: #003b7a;
+    --hp-ink: #1a1f2c;
   }
 
   .dark {
-    --background: 220 13% 9%;
-    --foreground: 0 0% 95%;
-    --card: 220 13% 9%;
-    --card-foreground: 0 0% 95%;
-    --popover: 220 13% 9%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 0 0% 95%;
-    --primary-foreground: 220 13% 9%;
-    --secondary: 220 10% 14%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 220 10% 14%;
-    --muted-foreground: 220 5% 55%;
-    --accent: 220 10% 14%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 10% 18%;
-    --input: 220 10% 18%;
-    --ring: 220 8% 40%;
+    --background: 220 24% 8%;
+    --foreground: 0 0% 96%;
+    --card: 220 24% 8%;
+    --card-foreground: 0 0% 96%;
+    --popover: 220 24% 8%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 199 100% 50%;
+    --primary-foreground: 220 24% 8%;
+    --secondary: 220 18% 14%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 220 18% 14%;
+    --muted-foreground: 220 8% 60%;
+    --accent: 199 60% 14%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 96%;
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 199 100% 50%;
     --radius: 0.5rem;
   }
 }
@@ -54,19 +63,121 @@
   * {
     @apply border-border;
   }
+
+  html {
+    font-feature-settings:
+      'cv11' on,
+      'ss01' on,
+      'ss03' on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
+    @apply bg-background text-foreground font-sans;
     margin: 0;
+    min-height: 100vh;
+    background-color: #ffffff;
+    background-image:
+      radial-gradient(
+        ellipse 60% 50% at 100% 0%,
+        rgba(0, 150, 214, 0.07),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 50% 50% at 0% 100%,
+        rgba(0, 150, 214, 0.05),
+        transparent 60%
+      );
+    background-attachment: fixed;
   }
 }
 
 @layer utilities {
   .page-container {
-    @apply w-full mx-auto px-2 md:px-8;
-    max-width: 1024px;
+    @apply w-full mx-auto px-4 md:px-8;
+    max-width: 1120px;
+  }
+
+  /* HP Blue gradient text */
+  .text-hp-gradient {
+    background: linear-gradient(135deg, #33a8dd 0%, #0096d6 50%, #0073a8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Refined corporate card surface */
+  .hp-card {
+    background: #ffffff;
+    border: 1px solid rgb(225 230 236);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 1) inset,
+      0 1px 2px rgba(15, 23, 42, 0.04),
+      0 8px 24px -16px rgba(15, 23, 42, 0.1);
+    border-radius: 12px;
+  }
+
+  .hp-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 150, 214, 0.2) 25%,
+      rgba(0, 150, 214, 0.2) 75%,
+      transparent 100%
+    );
+  }
+
+  .hp-hairline {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(0, 150, 214, 0.3),
+      transparent
+    );
+  }
+
+  .hp-scroll::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .hp-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .hp-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0, 150, 214, 0.3);
+    border-radius: 999px;
+  }
+  .hp-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 150, 214, 0.55);
+  }
+
+  .hp-link {
+    position: relative;
+    transition: color 200ms ease;
+  }
+  .hp-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 1px;
+    background: #0096d6;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .hp-link:hover::after {
+    transform: scaleX(1);
+  }
+
+  .hp-focus-ring:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 1px #ffffff,
+      0 0 0 3px rgba(0, 150, 214, 0.5);
   }
 }

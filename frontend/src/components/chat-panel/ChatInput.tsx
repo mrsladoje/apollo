@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { ArrowUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
@@ -22,16 +22,17 @@ export function ChatInput({
   onBlur,
 }: ChatInputProps) {
   const [internalValue, setInternalValue] = useState('')
+  const [hasContent, setHasContent] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const isControlled = value !== undefined
   const currentValue = isControlled ? value : internalValue
 
-  // Auto-resize textarea to fit content
   const resize = useCallback(() => {
     const el = inputRef.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
+    setHasContent(el.value.trim().length > 0)
   }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -50,6 +51,7 @@ export function ChatInput({
       inputRef.current.style.height = 'auto'
       inputRef.current.focus()
     }
+    setHasContent(false)
   }, [isControlled, onChange])
 
   const handleSubmit = useCallback(
@@ -76,7 +78,6 @@ export function ChatInput({
     }
   }
 
-  // Sync controlled value into the textarea
   useEffect(() => {
     if (
       isControlled &&
@@ -88,7 +89,6 @@ export function ChatInput({
     }
   }, [isControlled, value, resize])
 
-  // Auto-focus on mount
   useEffect(() => {
     if (!disabled) inputRef.current?.focus()
   }, [disabled])
@@ -109,16 +109,34 @@ export function ChatInput({
         defaultValue={isControlled ? undefined : internalValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        className='flex-1 resize-none overflow-hidden bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none'
+        className='flex-1 resize-none overflow-hidden bg-transparent font-sans text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/55 outline-none'
         onFocus={onFocus}
         onBlur={onBlur}
       />
       <button
         type='submit'
-        disabled={disabled}
-        className='shrink-0 pb-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30'
+        disabled={disabled || !hasContent}
+        aria-label='Send message'
+        className={cn(
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200',
+          'disabled:cursor-not-allowed disabled:opacity-30',
+        )}
+        style={{
+          background: hasContent
+            ? 'linear-gradient(180deg, #0096D6 0%, #0073A8 100%)'
+            : 'rgb(225 230 236)',
+          boxShadow: hasContent
+            ? '0 1px 0 rgba(255,255,255,0.2) inset, 0 4px 14px -4px rgba(0,150,214,0.55)'
+            : 'none',
+        }}
       >
-        <Send className='h-3.5 w-3.5' />
+        <ArrowUp
+          className='h-3.5 w-3.5'
+          style={{
+            color: hasContent ? '#FFFFFF' : '#94A3B8',
+            strokeWidth: 2.4,
+          }}
+        />
       </button>
     </form>
   )

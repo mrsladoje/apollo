@@ -11,9 +11,11 @@ describe('<SeverityBadge>', () => {
     },
   )
 
-  it('applies the refusal gray palette', () => {
+  it('applies the muted refusal palette', () => {
     render(<SeverityBadge severity='REFUSAL' />)
     const badge = screen.getByText('REFUSAL')
-    expect(badge.className).toMatch(/zinc/)
+    // Refusal uses a neutral slate palette distinct from the chromatic
+    // INFO (HP Blue) / WARNING (amber) / CRITICAL (red) chips.
+    expect(badge.className).toMatch(/100,116,139|#475569/i)
   })
 })

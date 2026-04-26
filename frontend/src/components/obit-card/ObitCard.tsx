@@ -8,13 +8,19 @@ interface ObitCardProps {
 
 export function ObitCard({ obit, className }: ObitCardProps) {
   return (
-    <div
-      className={cn('border-l-2 border-red-500/40 pl-3 space-y-1', className)}
-    >
-      <p className='text-[10px] font-mono uppercase tracking-wider text-red-400'>
+    <div className={cn('relative space-y-1 rounded-md py-1 pl-3 pr-2', className)}>
+      <span
+        aria-hidden
+        className='pointer-events-none absolute left-0 top-1 bottom-1 w-[2px] rounded-full'
+        style={{ background: '#DC2626' }}
+      />
+      <p
+        className='font-mono text-[10px] uppercase tracking-[0.16em]'
+        style={{ color: '#B91C1C' }}
+      >
         {obit.component} — failed
       </p>
-      <p className='text-[11px] text-muted-foreground leading-relaxed'>
+      <p className='text-[12px] leading-relaxed text-foreground/75'>
         {obit.narrative}
       </p>
     </div>

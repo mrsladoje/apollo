@@ -8,8 +8,8 @@ interface WhatIfFieldProps {
 
 export function WhatIfField({ label, children, className }: WhatIfFieldProps) {
   return (
-    <div className={cn('space-y-1', className)}>
-      <p className='text-[10px] uppercase tracking-wider text-muted-foreground'>
+    <div className={cn('space-y-1.5', className)}>
+      <p className='font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground/75'>
         {label}
       </p>
       {children}

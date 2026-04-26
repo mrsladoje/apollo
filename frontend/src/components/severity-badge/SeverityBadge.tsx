@@ -1,11 +1,15 @@
 import { cn } from '@/lib/utils'
 import type { Severity } from '@/types'
 
+// Corporate-clean severity chips — HP Blue for INFO, semantic for the rest
 const SEVERITY_CLASSES: Record<Severity, string> = {
-  INFO: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-  WARNING: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-  CRITICAL: 'bg-red-500/10 text-red-400 border border-red-500/20',
-  REFUSAL: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20',
+  INFO: 'bg-[rgba(0,150,214,0.10)] text-[#0073A8] border-[rgba(0,150,214,0.32)]',
+  WARNING:
+    'bg-[rgba(245,158,11,0.10)] text-[#B45309] border-[rgba(245,158,11,0.32)]',
+  CRITICAL:
+    'bg-[rgba(220,38,38,0.10)] text-[#B91C1C] border-[rgba(220,38,38,0.32)]',
+  REFUSAL:
+    'bg-[rgba(100,116,139,0.10)] text-[#475569] border-[rgba(100,116,139,0.32)]',
 }
 
 interface SeverityBadgeProps {
@@ -17,7 +21,7 @@ export function SeverityBadge({ severity, className }: SeverityBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold tracking-wider uppercase',
+        'inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.16em]',
         SEVERITY_CLASSES[severity],
         className,
       )}

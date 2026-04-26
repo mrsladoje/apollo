@@ -42,7 +42,7 @@ export function PrinterCanvas({
       className={className}
       initial={{ opacity: 0 }}
       animate={{ opacity: wrapperOpacity }}
-      transition={{ duration: 1.2, delay: 4.5, ease: 'easeOut' }}
+      transition={{ duration: 0.4, delay: 0, ease: 'easeOut' }}
     >
       <Canvas
         camera={{ position: [0, 0.5, 3.5], fov: 45 }}

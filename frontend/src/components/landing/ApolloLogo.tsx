@@ -1,20 +1,126 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 
-// SVG paths extracted from /public/APOLLO.svg (viewBox 0 0 1440 277)
-const APOLLO_PATHS = [
-  // A
-  'M43.0537 272.498H0L96.7395 3.67532H143.6L240.339 272.498H197.285L121.285 52.5045H119.185L43.0537 272.498ZM50.273 167.227H189.935V201.355H50.273V167.227Z',
-  // P
-  'M279.16 272.498V3.67532H374.98C395.894 3.67532 413.221 7.48189 426.96 15.095C440.698 22.7082 450.98 33.1216 457.806 46.3352C464.631 59.4613 468.044 74.2501 468.044 90.7015C468.044 107.24 464.588 122.117 457.675 135.33C450.849 148.456 440.523 158.87 426.697 166.57C412.958 174.184 395.676 177.99 374.849 177.99H308.956V143.6H371.174C384.387 143.6 395.107 141.325 403.333 136.774C411.558 132.136 417.596 125.836 421.447 117.873C425.297 109.909 427.222 100.852 427.222 90.7015C427.222 80.5506 425.297 71.5373 421.447 63.6617C417.596 55.786 411.514 49.6167 403.201 45.1538C394.976 40.691 384.125 38.4595 370.649 38.4595H319.719V272.498H279.16Z',
-  // O (first)
-  'M749.107 138.087C749.107 166.789 743.857 191.466 733.356 212.118C722.855 232.682 708.46 248.521 690.171 259.635C671.969 270.66 651.274 276.173 628.084 276.173C604.807 276.173 584.024 270.66 565.735 259.635C547.534 248.521 533.183 232.638 522.682 211.987C512.181 191.335 506.93 166.702 506.93 138.087C506.93 109.384 512.181 84.7509 522.682 64.1867C533.183 43.5349 547.534 27.6961 565.735 16.6702C584.024 5.55672 604.807 0 628.084 0C651.274 0 671.969 5.55672 690.171 16.6702C708.46 27.6961 722.855 43.5349 733.356 64.1867C743.857 84.7509 749.107 109.384 749.107 138.087ZM708.941 138.087C708.941 116.21 705.397 97.7895 698.309 82.8258C691.309 67.7745 681.683 56.3985 669.432 48.6979C657.268 40.9097 643.486 37.0156 628.084 37.0156C612.596 37.0156 598.769 40.9097 586.606 48.6979C574.442 56.3985 564.817 67.7745 557.729 82.8258C550.728 97.7895 547.228 116.21 547.228 138.087C547.228 159.964 550.728 178.428 557.729 193.479C564.817 208.443 574.442 219.819 586.606 227.607C598.769 235.307 612.596 239.158 628.084 239.158C643.486 239.158 657.268 235.307 669.432 227.607C681.683 219.819 691.309 208.443 698.309 193.479C705.397 178.428 708.941 159.964 708.941 138.087Z',
-  // L (first)
-  'M799.676 272.498V3.67532H840.235V237.583H962.046V272.498H799.676Z',
-  // L (second)
-  'M1008.32 272.498V3.67532H1048.87V237.583H1170.69V272.498H1008.32Z',
-  // O (second)
-  'M1440 138.087C1440 166.789 1434.75 191.466 1424.25 212.118C1413.75 232.682 1399.35 248.521 1381.06 259.635C1362.86 270.66 1342.17 276.173 1318.98 276.173C1295.7 276.173 1274.92 270.66 1256.63 259.635C1238.43 248.521 1224.08 232.638 1213.57 211.987C1203.07 191.335 1197.82 166.702 1197.82 138.087C1197.82 109.384 1203.07 84.7509 1213.57 64.1867C1224.08 43.5349 1238.43 27.6961 1256.63 16.6702C1274.92 5.55672 1295.7 0 1318.98 0C1342.17 0 1362.86 5.55672 1381.06 16.6702C1399.35 27.6961 1413.75 43.5349 1424.25 64.1867C1434.75 84.7509 1440 109.384 1440 138.087ZM1399.83 138.087C1399.83 116.21 1396.29 97.7895 1389.2 82.8258C1382.2 67.7745 1372.58 56.3985 1360.32 48.6979C1348.16 40.9097 1334.38 37.0156 1318.98 37.0156C1303.49 37.0156 1289.66 40.9097 1277.5 48.6979C1265.34 56.3985 1255.71 67.7745 1248.62 82.8258C1241.62 97.7895 1238.12 116.21 1238.12 138.087C1238.12 159.964 1241.62 178.428 1248.62 193.479C1255.71 208.443 1265.34 219.819 1277.5 227.607C1289.66 235.307 1303.49 239.158 1318.98 239.158C1334.38 239.158 1348.16 235.307 1360.32 227.607C1381.06 219.819 1396.29 208.443 1399.83 193.479C1396.29 178.428 1399.83 159.964 1399.83 138.087Z',
+// ASCII art lifted from scripts/run_dev.sh — sun + APOLLO + dev-stack tagline.
+// Each row is decomposed into colored segments matching the bash colorisation,
+// remapped to the pearl palette: champagne/rose-gold sun, iridescent rose →
+// mauve → violet APOLLO, muted pearl-grey decoration.
+
+type Tone =
+  | 'star'
+  | 'sun'
+  | 'sunCore'
+  | 'dim'
+  | 'apolloA'
+  | 'apolloB'
+  | 'apolloC'
+
+interface Segment {
+  text: string
+  tone: Tone
+}
+
+const TONES: Record<Tone, string> = {
+  // muted steel — sky stars
+  star: '#7AA3BF',
+  // HP Blue — sun outline
+  sun: '#0096D6',
+  // brighter HP cyan — sun core
+  sunCore: '#5BB8E0',
+  // cool slate — decoration / tagline
+  dim: '#94A3B8',
+  // APOLLO — graduated HP blue: light → brand → deep
+  apolloA: '#33A8DD',
+  apolloB: '#0096D6',
+  apolloC: '#0073A8',
+}
+
+const ROWS: Segment[][] = [
+  [{ text: '                    .                      .', tone: 'star' }],
+  [
+    {
+      text: '         .            *        .       .         .       *',
+      tone: 'star',
+    },
+  ],
+  [
+    {
+      text: '    *          .            .                .',
+      tone: 'star',
+    },
+  ],
+  [{ text: '                          ___', tone: 'sun' }],
+  [
+    { text: "                       .-'   '-.", tone: 'sun' },
+    { text: '        .    *', tone: 'dim' },
+  ],
+  [
+    { text: '                      /  ', tone: 'sun' },
+    { text: '.-~-.', tone: 'sunCore' },
+    { text: '  \\', tone: 'sun' },
+    { text: '    .', tone: 'dim' },
+  ],
+  [
+    { text: '              .', tone: 'dim' },
+    { text: '      |  ', tone: 'sun' },
+    { text: '/     \\', tone: 'sunCore' },
+    { text: '  |', tone: 'sun' },
+    { text: '     *', tone: 'dim' },
+  ],
+  [
+    { text: '                     |  ', tone: 'sun' },
+    { text: '\\     /', tone: 'sunCore' },
+    { text: '  |', tone: 'sun' },
+  ],
+  [
+    { text: '                      \\  ', tone: 'sun' },
+    { text: "'-~-'", tone: 'sunCore' },
+    { text: '  /', tone: 'sun' },
+    { text: '     .', tone: 'dim' },
+  ],
+  [{ text: "                       '-.___.-'", tone: 'sun' }],
+  [
+    {
+      text: '        .          *               .           .',
+      tone: 'dim',
+    },
+  ],
+  [
+    {
+      text: '     ___    ____   ___   _      _      ___',
+      tone: 'apolloA',
+    },
+  ],
+  [
+    {
+      text: '    / _ \\  |  _ \\ / _ \\ | |    | |    / _ \\',
+      tone: 'apolloA',
+    },
+  ],
+  [
+    {
+      text: '   | |_| | | |_) | | | || |    | |   | | | |',
+      tone: 'apolloB',
+    },
+  ],
+  [
+    {
+      text: '   |  _  | |  __/| |_| || |___ | |___| |_| |',
+      tone: 'apolloB',
+    },
+  ],
+  [
+    {
+      text: '   |_| |_| |_|    \\___/ |_____||_____|\\___/',
+      tone: 'apolloC',
+    },
+  ],
+  [
+    {
+      text: '        ~ integrated dev stack — backend + frontend ~',
+      tone: 'dim',
+    },
+  ],
 ]
 
 interface ApolloLogoProps {
@@ -23,43 +129,83 @@ interface ApolloLogoProps {
 }
 
 export function ApolloLogo({ className, style }: ApolloLogoProps) {
-  // Animation timeline:
-  // 0–0.6s: logo opacity fades in
-  // 0.6–2.6s: fill transitions stone-50 → black
-  // 2.6–4.6s: fill transitions black → stone-50
-
   return (
     <motion.div
       className={className}
-      style={style}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...style,
+      }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.6, ease: 'easeOut' }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      aria-label='Apollo'
     >
-      <svg
-        viewBox='0 0 1440 277'
-        fill='none'
-        xmlns='http://www.w3.org/2000/svg'
-        style={{ width: '100%', height: 'auto', display: 'block' }}
-        aria-label='Apollo'
+      <pre
+        style={{
+          margin: 0,
+          padding: 0,
+          fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+          fontSize: 'clamp(7px, 1.05vw, 14px)',
+          lineHeight: 1.08,
+          letterSpacing: '0.01em',
+          fontWeight: 500,
+          textShadow:
+            '0 1px 0 rgba(255,255,255,0.9), 0 0 22px rgba(0,150,214,0.18)',
+          whiteSpace: 'pre',
+          userSelect: 'none',
+          position: 'relative',
+        }}
       >
-        {APOLLO_PATHS.map((d, i) => (
-          <motion.path
+        {ROWS.map((row, i) => (
+          <motion.div
             key={i}
-            d={d}
-            initial={{ fill: '#FAFAF9' }}
-            animate={{
-              fill: ['#FAFAF9', '#000000', '#FAFAF9'],
-            }}
+            style={{ display: 'block' }}
+            initial={{ opacity: 0, y: 4, filter: 'blur(2px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{
-              duration: 4,
-              delay: 0.5,
-              times: [0, 0.5, 1],
-              ease: 'easeInOut',
+              duration: 0.45,
+              delay: 0.05 + i * 0.028,
+              ease: [0.22, 0.61, 0.36, 1],
             }}
-          />
+          >
+            {row.map((seg, j) => (
+              <span key={j} style={{ color: TONES[seg.tone] }}>
+                {seg.text}
+              </span>
+            ))}
+          </motion.div>
         ))}
-      </svg>
+
+        {/* Pearl shimmer sweep — single elegant pass after reveal */}
+        <motion.span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.55) 50%, transparent 62%)',
+            backgroundSize: '220% 100%',
+            mixBlendMode: 'overlay',
+          }}
+          initial={{ backgroundPosition: '220% 0%', opacity: 0 }}
+          animate={{
+            backgroundPosition: ['220% 0%', '-120% 0%'],
+            opacity: [0, 1, 1, 0],
+          }}
+          transition={{
+            duration: 1.6,
+            delay: 0.85,
+            times: [0, 0.15, 0.85, 1],
+            ease: [0.4, 0, 0.2, 1],
+          }}
+        />
+      </pre>
     </motion.div>
   )
 }

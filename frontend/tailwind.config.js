@@ -38,11 +38,45 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // HP brand palette
+        hp: {
+          blue: '#0096D6',
+          'blue-light': '#33A8DD',
+          'blue-pale': '#5BB8E0',
+          'blue-deep': '#0073A8',
+          navy: '#003B7A',
+          ink: '#1A1F2C',
+        },
+      },
+      fontFamily: {
+        sans: [
+          '"Inter"',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
+        ],
+        display: ['"Inter"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      keyframes: {
+        'hp-pulse': {
+          '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.18)' },
+        },
+        'hp-shimmer': {
+          '0%': { backgroundPosition: '200% 0%' },
+          '100%': { backgroundPosition: '-100% 0%' },
+        },
+      },
+      animation: {
+        'hp-pulse': 'hp-pulse 2.4s ease-in-out infinite',
+        'hp-shimmer': 'hp-shimmer 2.4s cubic-bezier(0.4, 0, 0.2, 1) 1.4s 1 forwards',
       },
     },
   },

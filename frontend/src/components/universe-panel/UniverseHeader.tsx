@@ -14,16 +14,16 @@ export function UniverseHeader({
   className,
 }: UniverseHeaderProps) {
   return (
-    <div className={cn('flex items-baseline justify-between', className)}>
+    <div className={cn('flex items-baseline justify-between gap-2', className)}>
       <p
         className={cn(
-          'text-xs font-semibold tracking-wide',
-          isDarkTwin ? 'text-red-400/70' : 'text-muted-foreground',
+          'truncate text-[12px] font-semibold tracking-tight',
+          isDarkTwin ? 'text-[#B91C1C]' : 'text-foreground',
         )}
       >
         {label}
       </p>
-      <span className='text-[10px] font-mono text-muted-foreground/50'>
+      <span className='font-mono text-[10px] tabular-nums text-muted-foreground/60'>
         t={t}
       </span>
     </div>
