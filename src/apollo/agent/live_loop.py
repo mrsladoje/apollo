@@ -55,6 +55,11 @@ async def stream_live_events(
             yield ev
         return
 
+    if _wants_all_component_history(query):
+        async for ev in _stream_all_component_plots(query, db_path, trace_url, system_prompt, runtime_lm):
+            yield ev
+        return
+
     try:
         selection = _select_tool(query, run_context, system_prompt, runtime_lm)
     except Exception as exc:  # noqa: BLE001
@@ -246,8 +251,8 @@ Current run context: {run_context or "none"}.
 
 Aliases:
 - "dark twin" means run {_DARK_TWIN_RUN}.
-- "dark twin's components" means all six components in run {_DARK_TWIN_RUN}.
-- "component history", "plot history", "timeline", and "show history" mean plot_component_history.
+- "dark twin graph", "dark twin plot", and "dark twin's components" mean all six components in run {_DARK_TWIN_RUN}.
+- "component history", "plot history", "timeline", "graph", and "show history" mean plot_component_history.
 
 Routing rules:
 - direct health/status/value for one run+component -> query_historian
@@ -330,7 +335,9 @@ def _infer_component(query: str) -> ComponentId | None:
 
 def _wants_all_component_history(query: str) -> bool:
     q = query.lower()
-    wants_plot = any(word in q for word in ("plot", "history", "timeline", "show me"))
+    if "dark twin" in q and any(word in q for word in ("graph", "plot", "history", "timeline")):
+        return True
+    wants_plot = any(word in q for word in ("plot", "history", "timeline", "graph", "show me"))
     wants_all = "components" in q or "all six" in q or "all components" in q
     return wants_plot and wants_all
 
