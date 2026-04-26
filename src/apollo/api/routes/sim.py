@@ -268,12 +268,26 @@ async def _historian_events(
 
 
 async def _synthetic_events(
-    run_id: str, universe_id: str, seed: int, *, speed: float = 1.0
+    run_id: str,
+    universe_id: str,
+    seed: int,
+    *,
+    speed: float = 1.0,
+    scenario: str = "barcelona-humid",
 ) -> AsyncIterator[str]:
-    """Original deterministic stub — used when the historian is empty."""
+    """Original deterministic stub — used when the historian is empty.
+
+    Scenario shapes the wear curve: ``stressed`` decays fastest, ``phoenix-dry``
+    sits in the middle, ``barcelona-humid`` is the gentlest baseline.
+    """
     rng = random.Random(seed)
     multipliers = {"dark-twin": 1.8, "fixed-schedule": 1.0, "apollo": 0.5}
-    mult = multipliers.get(universe_id, 1.0)
+    scenario_mult = {
+        "barcelona-humid": 1.0,
+        "phoenix-dry": 1.4,
+        "stressed": 2.2,
+    }.get(scenario, 1.0)
+    mult = multipliers.get(universe_id, 1.0) * scenario_mult
     health = {c: 1.0 for c in COMPONENTS}
 
     for t in range(0, 121, 2):
@@ -344,16 +358,24 @@ async def _synthetic_events(
         await asyncio.sleep(scaled)
 
 
+_VALID_SCENARIOS = {"barcelona-humid", "phoenix-dry", "stressed"}
+
+
 @router.get("/stream/{universe_id}")
-async def stream_sim(universe_id: str, speed: float = 1.0):
+async def stream_sim(universe_id: str, speed: float = 1.0, scenario: Optional[str] = None):
     """Replay the historian for the configured universe; fall back to the
     deterministic synthetic stream when no real data is present.
+
+    The optional ``scenario`` query param overrides the default scenario
+    (``barcelona-humid``) — accepted values: ``barcelona-humid``, ``phoenix-dry``,
+    ``stressed``. Each universe keeps its own policy (none / fixed / ai).
     """
     conn = _open_historian()
     real_run_id: Optional[str] = None
     if conn is not None and universe_id in UNIVERSE_TO_RUN_PARAMS:
-        scenario, policy, _ = UNIVERSE_TO_RUN_PARAMS[universe_id]
-        real_run_id = _resolve_run_id(conn, scenario, policy)
+        default_scenario, policy, _ = UNIVERSE_TO_RUN_PARAMS[universe_id]
+        chosen_scenario = scenario if scenario in _VALID_SCENARIOS else default_scenario
+        real_run_id = _resolve_run_id(conn, chosen_scenario, policy)
 
     # Clamp speed to a sane range — 0.05 (20x slower) up to 8x faster.
     safe_speed = max(0.05, min(8.0, speed))
@@ -382,10 +404,11 @@ async def stream_sim(universe_id: str, speed: float = 1.0):
     )
     run_id = fallback["run_id"]
     seed = _SYNTH_SEEDS.get(run_id, 1)
+    chosen_scenario = scenario if scenario in _VALID_SCENARIOS else "barcelona-humid"
 
     async def gen_synth():
         async for data in _synthetic_events(
-            run_id, universe_id, seed, speed=safe_speed
+            run_id, universe_id, seed, speed=safe_speed, scenario=chosen_scenario
         ):
             yield {"event": "message", "data": data}
 

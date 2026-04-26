@@ -1,20 +1,26 @@
 import { cn } from '@/lib/utils'
+import type { SimScenario } from '@/hooks/useSim'
 import { PaceControl } from './PaceControl'
+import { ScenarioSelect } from './ScenarioSelect'
 
 interface SimHeaderProps {
   className?: string
   speed: number
+  scenario: SimScenario
   onSpeedChange: (s: number) => void
   onPreset: (s: number) => void
   onRestart: () => void
+  onScenarioChange: (s: SimScenario) => void
 }
 
 export function SimHeader({
   className,
   speed,
+  scenario,
   onSpeedChange,
   onPreset,
   onRestart,
+  onScenarioChange,
 }: SimHeaderProps) {
   return (
     <div
@@ -34,6 +40,10 @@ export function SimHeader({
           / 3 universes
         </span>
       </div>
+      <ScenarioSelect
+        scenario={scenario}
+        onScenarioChange={onScenarioChange}
+      />
       <PaceControl
         speed={speed}
         onSpeedChange={onSpeedChange}

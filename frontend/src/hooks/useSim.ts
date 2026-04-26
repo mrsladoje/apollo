@@ -96,14 +96,22 @@ function simReducer(state: SimState, action: SimAction): SimState {
   }
 }
 
+export type SimScenario = 'barcelona-humid' | 'phoenix-dry' | 'stressed'
+
 interface UseSimOptions {
   /** Playback speed multiplier — 0.2 = 5x slower, 2 = 2x faster. */
   speed?: number
   /** Bump to force a fresh stream reconnect from t=0 at the current speed. */
   restartKey?: number
+  /** Scenario override — drives which historian run (or synthetic curve) plays. */
+  scenario?: SimScenario
 }
 
-export function useSim({ speed = 1, restartKey = 0 }: UseSimOptions = {}) {
+export function useSim({
+  speed = 1,
+  restartKey = 0,
+  scenario = 'barcelona-humid',
+}: UseSimOptions = {}) {
   const [state, dispatch] = useReducer(simReducer, undefined, initialState)
 
   useEffect(() => {
@@ -113,7 +121,7 @@ export function useSim({ speed = 1, restartKey = 0 }: UseSimOptions = {}) {
     dispatch({ type: 'reset' })
 
     const sources = UNIVERSES.map((u) => {
-      const url = `/api/sim/stream/${u}?speed=${speed.toFixed(2)}`
+      const url = `/api/sim/stream/${u}?speed=${speed.toFixed(2)}&scenario=${encodeURIComponent(scenario)}`
       const es = new EventSource(url)
       es.addEventListener('message', (e) => {
         if (cancelled) return
@@ -131,7 +139,7 @@ export function useSim({ speed = 1, restartKey = 0 }: UseSimOptions = {}) {
       cancelled = true
       sources.forEach((es) => es.close())
     }
-  }, [speed, restartKey])
+  }, [speed, restartKey, scenario])
 
   const masterHealth = useMemo(() => {
     return {
