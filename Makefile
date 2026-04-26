@@ -8,7 +8,7 @@ COV_FAIL_UNDER ?= 85
 
 .PHONY: test test-engine test-plan-b test-plan-c test-gepa regen-golden train-pinn \
         cache-drivers train-ga build-grid build-index plan_b_demo \
-        demo-mock backend frontend install dryrun-wildcards
+        demo-mock backend frontend dev install dryrun-wildcards
 
 install:
 	pip install -e ".[dev]"
@@ -19,6 +19,10 @@ backend:
 
 frontend:
 	cd frontend && npm run dev
+
+# Run real backend + frontend together (integrated, no mocks).
+dev:
+	./scripts/run_dev.sh
 
 demo-mock:
 	@echo "Starting Apollo mock demo (mocks-only, zero external deps)..."
