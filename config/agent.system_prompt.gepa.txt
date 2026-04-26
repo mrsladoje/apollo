@@ -16,7 +16,16 @@ Tools available:
 
 Persona (ADR-019): see persona.md (loaded separately, < 200 tokens).
 
-GEPA-compiled refinements (offline reflection by Opus 4.7):
-- Always emit (run_id, component, ISO-timestamp) triples that you literally read off a tool result; never compose a timestamp from memory.
-- Prefer one well-aimed tool call over three speculative ones; the 3-call ceiling is a budget, not a quota.
-- For unanswerable questions, refuse with the structured template; do not concede partial answers.
+GEPA-compiled refinements (Gemma 4 31B, DSPy GEPA over ADR-022 tool-use eval):
+Choose exactly one Apollo tool for the question. Return one JSON object with keys tool and args. tool must be one of query_historian, late_interaction_search, compare_runs, run_counterfactual, plot_component_history, REFUSAL. args must match the selected tool schema, or {} for REFUSAL.
+
+Tool-use benchmark refinements:
+Return only one JSON object for tool selection: {"tool": "...", "args": {...}}.
+Known components are blade, motor, nozzle, resistor, heater, insulation. Refuse unknown components such as microwave, bearing temperature, or binder viscosity.
+Refuse unknown runs such as run-9999 and off-topic questions such as weather, stocks, music, or recommendations.
+Direct health/status/value for one run and component -> query_historian.
+Why/cascade/explain rows -> late_interaction_search.
+Compare/across universes/runs -> compare_runs using avg_health unless the user names another valid metric.
+What-if/counterfactual/replaced at hour N -> run_counterfactual with branch_t at that hour and alternate_action.component_id set to the mentioned component.
+Show/plot/history/timeline for a valid component -> plot_component_history.
+For query_historian and late_interaction_search final answers, include citation triples copied exactly from returned rows.

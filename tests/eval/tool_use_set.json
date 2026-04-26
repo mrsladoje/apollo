@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "description": "ADR-022 live tool-use eval: model must choose a tool, provide valid args, use returned telemetry, cite rows, and refuse unsupported questions.",
+  "items": [
+    {
+      "id": "tool-query-nozzle",
+      "question": "What was the nozzle health in run barcelona-humid-ai-seed0042 at 2026-04-25T08:00:00?",
+      "expected_tool": "query_historian",
+      "expected_run_id": "barcelona-humid-ai-seed0042",
+      "expected_component": "nozzle",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "expected_contains": ["nozzle", "barcelona-humid-ai-seed0042", "2026-04-25T08:00:00"],
+      "requires_citation": true,
+      "is_unanswerable": false
+    },
+    {
+      "id": "tool-search-cascade",
+      "question": "Which historian rows best explain the thermal cascade in barcelona-humid-none-seed0042?",
+      "expected_tool": "late_interaction_search",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_contains": ["barcelona-humid-none-seed0042"],
+      "requires_citation": true,
+      "is_unanswerable": false
+    },
+    {
+      "id": "tool-compare-universes",
+      "question": "Compare heater health across the three Barcelona universes.",
+      "expected_tool": "compare_runs",
+      "expected_run_ids": [
+        "barcelona-humid-none-seed0042",
+        "barcelona-humid-fixed-seed0042",
+        "barcelona-humid-ai-seed0042"
+      ],
+      "expected_component": "heater",
+      "expected_contains": ["barcelona-humid-none-seed0042", "barcelona-humid-fixed-seed0042", "barcelona-humid-ai-seed0042"],
+      "requires_citation": false,
+      "is_unanswerable": false
+    },
+    {
+      "id": "tool-counterfactual-insulation",
+      "question": "What if we replaced the insulation at hour 4 in barcelona-humid-none-seed0042?",
+      "expected_tool": "run_counterfactual",
+      "expected_run_id": "barcelona-humid-none-seed0042",
+      "expected_component": "insulation",
+      "expected_timestamp": "2026-04-25T08:00:00",
+      "expected_contains": ["uptime", "insulation", "barcelona-humid-none-seed0042"],
+      "requires_citation": false,
+      "is_unanswerable": false
+    },
+    {
+      "id": "tool-plot-nozzle-history",
+      "question": "Show me the nozzle history for phoenix-dry-ai-seed0042.",
+      "expected_tool": "plot_component_history",
+      "expected_run_id": "phoenix-dry-ai-seed0042",
+      "expected_component": "nozzle",
+      "expected_contains": ["phoenix-dry-ai-seed0042", "nozzle"],
+      "requires_citation": false,
+      "is_unanswerable": false
+    },
+    {
+      "id": "tool-query-bearing",
+      "question": "Did the motor bearing in stressed-none-seed0042 become unhealthy?",
+      "expected_tool": "query_historian",
+      "expected_run_id": "stressed-none-seed0042",
+      "expected_component": "motor",
+      "expected_contains": ["stressed-none-seed0042", "motor"],
+      "requires_citation": true,
+      "is_unanswerable": false
+    },
+    {
+      "id": "refuse-weather",
+      "question": "What is the weather in Madrid?",
+      "expected_tool": "REFUSAL",
+      "expected_contains": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "refuse-unknown-component",
+      "question": "Did the microwave component fail in barcelona-humid-ai-seed0042?",
+      "expected_tool": "REFUSAL",
+      "expected_contains": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "refuse-unknown-run",
+      "question": "What was the bearing temperature in run-9999?",
+      "expected_tool": "REFUSAL",
+      "expected_contains": ["REFUSAL"],
+      "is_unanswerable": true
+    },
+    {
+      "id": "refuse-missing-metric",
+      "question": "Show me the binder viscosity timeline for barcelona-humid-ai-seed0042.",
+      "expected_tool": "REFUSAL",
+      "expected_contains": ["REFUSAL"],
+      "is_unanswerable": true
+    }
+  ]
+}

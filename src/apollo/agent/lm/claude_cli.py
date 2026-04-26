@@ -31,7 +31,7 @@ class ClaudeCLI(_DSPY_BASE):  # type: ignore[misc]
 
     def __init__(
         self,
-        model: str = "opus-4-7",
+        model: str = "",
         cli: str | None = None,
         extra_args: Optional[Iterable[str]] = None,
         max_chars: int = 8192,
@@ -68,12 +68,16 @@ class ClaudeCLI(_DSPY_BASE):  # type: ignore[misc]
     # ----- internals -----------------------------------------------------
     def _invoke(self, prompt: str) -> str:
         truncated = prompt[: self.max_chars]
-        cmd = [self.cli, "--print", "--model", self.model, *self.extra_args, truncated]
+        cmd = [self.cli, "--print", *self.extra_args]
+        if self.model:
+            cmd.extend(["--model", self.model])
+        cmd.append(truncated)
         try:
             proc = subprocess.run(
                 cmd,
                 check=False,
                 capture_output=True,
+                input="",
                 text=True,
                 timeout=300,
             )
