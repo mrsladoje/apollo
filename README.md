@@ -19,13 +19,17 @@
         ~ your HP S100 digital twin ~
 ```
 
-# Apollo  🛰️
-
-> *"I don't infer the alternate universe — I run it."*
-
 Apollo is a **physics-grounded, agent-driven digital twin** for an industrial metal binder-jet 3-D printer (HP Metal Jet S100 class). It simulates 6 components across 3 subsystems with literature-anchored failure physics, watches three parallel cascades unfold over a ~10-hour print cycle, and lets a tool-using LLM agent answer operator questions with **zero hallucinations** by construction — every claim must resolve against a real row in the historian or the response is downgraded to a structured refusal.
 
 It is built around 22 Architecture Decision Records that pick the unfashionable-but-defensible tool every time: a 6×6 NumPy matrix instead of a Bayesian network, a Genetic Algorithm instead of RL, simulator deepcopy instead of causal-DAG inference, late-interaction retrieval instead of dense embeddings, and a 31B open model with a GEPA-evolved prompt instead of a frontier closed model.
+
+---
+
+## 🎥 See It In Action (YT▶️ link)
+
+[![HundDB Demo](https://img.youtube.com/vi/7_xYjXKY2TQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=7_xYjXKY2TQ)
+
+*Click on the image above to watch the full demo!*
 
 ---
 
