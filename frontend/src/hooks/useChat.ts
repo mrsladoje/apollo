@@ -3,7 +3,10 @@ import type { Message, SSEEvent, Citation, ToolCall } from '@/types'
 
 type ChatState = { messages: Message[] }
 
-type Action = { type: 'user'; text: string } | { type: 'sse'; event: SSEEvent }
+type Action =
+  | { type: 'user'; text: string }
+  | { type: 'sse'; event: SSEEvent }
+  | { type: 'clear' }
 
 let msgCounter = 0
 function newId() {
@@ -22,6 +25,10 @@ function emptyApolloMsg(): Message {
 }
 
 function chatReducer(state: ChatState, action: Action): ChatState {
+  if (action.type === 'clear') {
+    return { messages: [] }
+  }
+
   if (action.type === 'user') {
     return {
       messages: [
@@ -144,5 +151,11 @@ export function useChat() {
     es.close()
   }, [])
 
-  return { messages: state.messages, send }
+  const clear = useCallback(() => {
+    if (abortRef.current) abortRef.current()
+    abortRef.current = null
+    dispatch({ type: 'clear' })
+  }, [])
+
+  return { messages: state.messages, send, clear }
 }

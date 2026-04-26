@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Tooltip } from 'react-tooltip'
+import { Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SimSection } from '@/components/sim-section'
 import { WhatIfPanel } from '@/components/what-if-panel'
@@ -38,8 +39,9 @@ interface ChatScreenProps {
 }
 
 function FixedChat() {
-  const { messages, send } = useChatContext()
+  const { messages, send, clear } = useChatContext()
   const streaming = messages.some((m) => m.streaming)
+  const canClear = messages.length > 0 && !streaming
   const [focused, setFocused] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -96,15 +98,33 @@ function FixedChat() {
           hasMessages ? 'max-h-[500px]' : 'max-h-0',
         )}
       >
-        <div className='hp-scroll max-h-[500px] overflow-y-auto px-5 pb-3 pt-5'>
+        <div className='hp-scroll relative max-h-[500px] overflow-y-auto px-5 pb-3 pt-5'>
           <MessageList messages={messages} />
           <div ref={bottomRef} />
         </div>
         <div className='hp-divider' />
       </div>
 
-      <div className='px-5 py-3'>
-        <ChatInput onSubmit={send} disabled={streaming} />
+      <div className='flex items-center gap-2 px-5 py-3'>
+        <button
+          type='button'
+          onClick={clear}
+          disabled={!canClear}
+          aria-label='Clear chat'
+          title='Clear chat'
+          className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors',
+            'hover:bg-[rgba(15,23,42,0.06)] hover:text-foreground',
+            'disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground',
+          )}
+        >
+          <Trash2 className='h-3.5 w-3.5' strokeWidth={2} />
+        </button>
+        <ChatInput
+          className='flex-1'
+          onSubmit={send}
+          disabled={streaming}
+        />
       </div>
     </div>
   )

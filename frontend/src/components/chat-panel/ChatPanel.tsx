@@ -20,7 +20,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ onCitationClick, className }: ChatPanelProps) {
-  const { messages, send } = useChatContext()
+  const { messages, send, clear } = useChatContext()
   const bottomRef = useRef<HTMLDivElement>(null)
   const streaming = messages.some((m) => m.streaming)
   const [inputValue, setInputValue] = useState('')
@@ -34,7 +34,7 @@ export function ChatPanel({ onCitationClick, className }: ChatPanelProps) {
 
   return (
     <div className={cn('flex flex-col', className)}>
-      <ChatHeader />
+      <ChatHeader onClear={clear} canClear={messages.length > 0 && !streaming} />
       <div className='min-h-0 flex-1 overflow-y-auto py-4'>
         {messages.length === 0 ? (
           <EmptyState />
