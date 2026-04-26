@@ -52,4 +52,7 @@ Allows for proper testing, policy comparison, counterfactual replay, etc etc...
 - Gets graded on TWO thigs - how well is the answer and does it break the laws of physics?
 - We combine it with Coffin-Manson for the heater component
 
+## Genetic Algorithm
 
+- The GA's job is to find the best maintenance policy
+- Produces 7 numbers - thresholds per components (6 of them) and the global preventive-lookahead coefficient that looks at future predictions
