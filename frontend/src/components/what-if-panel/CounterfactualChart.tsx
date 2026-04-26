@@ -34,7 +34,7 @@ export function CounterfactualChart({
         <ResponsiveContainer width='100%' height='100%'>
           <LineChart
             data={data}
-            margin={{ top: 4, right: 0, left: -28, bottom: 0 }}
+            margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
           >
             <XAxis
               dataKey='t'
@@ -44,9 +44,10 @@ export function CounterfactualChart({
             />
             <YAxis
               domain={[0, 1]}
-              tick={{ fontSize: 9, fill: '#666' }}
+              tick={false}
               axisLine={false}
               tickLine={false}
+              width={0}
             />
             <Tooltip
               contentStyle={{
