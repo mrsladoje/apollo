@@ -139,6 +139,7 @@ async def _historian_events(
     *,
     delay: float = 0.0,
     every_n_ticks: int = 1,
+    speed: float = 1.0,
 ) -> AsyncIterator[str]:
     """Replay one persisted run as the live SSE stream.
 
@@ -260,12 +261,14 @@ async def _historian_events(
                 }],
             })
 
-        if delay > 0:
-            await asyncio.sleep(delay)
+        # ``speed`` scales playback (0.2 = 5x slower, 2.0 = 2x faster).
+        scaled_delay = delay / speed if speed > 0 else delay
+        if scaled_delay > 0:
+            await asyncio.sleep(scaled_delay)
 
 
 async def _synthetic_events(
-    run_id: str, universe_id: str, seed: int
+    run_id: str, universe_id: str, seed: int, *, speed: float = 1.0
 ) -> AsyncIterator[str]:
     """Original deterministic stub — used when the historian is empty."""
     rng = random.Random(seed)
@@ -337,11 +340,12 @@ async def _synthetic_events(
                     }],
                 })
 
-        await asyncio.sleep(0.3)
+        scaled = 0.3 / speed if speed > 0 else 0.3
+        await asyncio.sleep(scaled)
 
 
 @router.get("/stream/{universe_id}")
-async def stream_sim(universe_id: str):
+async def stream_sim(universe_id: str, speed: float = 1.0):
     """Replay the historian for the configured universe; fall back to the
     deterministic synthetic stream when no real data is present.
     """
@@ -351,11 +355,19 @@ async def stream_sim(universe_id: str):
         scenario, policy, _ = UNIVERSE_TO_RUN_PARAMS[universe_id]
         real_run_id = _resolve_run_id(conn, scenario, policy)
 
+    # Clamp speed to a sane range — 0.05 (20x slower) up to 8x faster.
+    safe_speed = max(0.05, min(8.0, speed))
+
     if conn is not None and real_run_id is not None:
         async def gen_real():
             try:
                 async for data in _historian_events(
-                    conn, real_run_id, universe_id, delay=0.05, every_n_ticks=2
+                    conn,
+                    real_run_id,
+                    universe_id,
+                    delay=0.05,
+                    every_n_ticks=2,
+                    speed=safe_speed,
                 ):
                     yield {"event": "message", "data": data}
             finally:
@@ -372,7 +384,9 @@ async def stream_sim(universe_id: str):
     seed = _SYNTH_SEEDS.get(run_id, 1)
 
     async def gen_synth():
-        async for data in _synthetic_events(run_id, universe_id, seed):
+        async for data in _synthetic_events(
+            run_id, universe_id, seed, speed=safe_speed
+        ):
             yield {"event": "message", "data": data}
 
     return EventSourceResponse(gen_synth(), headers={"Cache-Control": "no-cache"}, ping=15)

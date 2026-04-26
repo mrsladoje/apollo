@@ -1,15 +1,25 @@
 import { cn } from '@/lib/utils'
-import { LiveIndicator } from './LiveIndicator'
+import { PaceControl } from './PaceControl'
 
 interface SimHeaderProps {
   className?: string
+  speed: number
+  onSpeedChange: (s: number) => void
+  onPreset: (s: number) => void
+  onRestart: () => void
 }
 
-export function SimHeader({ className }: SimHeaderProps) {
+export function SimHeader({
+  className,
+  speed,
+  onSpeedChange,
+  onPreset,
+  onRestart,
+}: SimHeaderProps) {
   return (
     <div
       className={cn(
-        'flex items-baseline justify-between gap-3 pb-3',
+        'flex items-center justify-between gap-3 pb-3',
         className,
       )}
     >
@@ -24,7 +34,12 @@ export function SimHeader({ className }: SimHeaderProps) {
           / 3 universes
         </span>
       </div>
-      <LiveIndicator />
+      <PaceControl
+        speed={speed}
+        onSpeedChange={onSpeedChange}
+        onPreset={onPreset}
+        onRestart={onRestart}
+      />
     </div>
   )
 }

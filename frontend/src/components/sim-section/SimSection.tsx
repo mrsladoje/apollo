@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useSim } from '@/hooks/useSim'
 import { UniversePanelGrid } from '@/components/universe-panel'
@@ -9,7 +10,11 @@ interface SimSectionProps {
 }
 
 export function SimSection({ className }: SimSectionProps) {
-  const { state } = useSim()
+  // Default 0.2× = 5x slower than the backend's natural sim cadence.
+  const [speed, setSpeed] = useState(0.2)
+  const [restartKey, setRestartKey] = useState(0)
+
+  const { state } = useSim({ speed, restartKey })
 
   const universes = UNIVERSES.map(({ id, label }) => {
     const u = state[id]
@@ -25,9 +30,19 @@ export function SimSection({ className }: SimSectionProps) {
     }
   })
 
+  const applyPreset = (s: number) => {
+    setSpeed(s)
+    setRestartKey((k) => k + 1)
+  }
+
   return (
     <section className={cn(className)}>
-      <SimHeader />
+      <SimHeader
+        speed={speed}
+        onSpeedChange={setSpeed}
+        onPreset={applyPreset}
+        onRestart={() => setRestartKey((k) => k + 1)}
+      />
       <UniversePanelGrid universes={universes} className='mt-4' />
     </section>
   )

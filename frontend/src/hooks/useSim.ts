@@ -21,6 +21,8 @@ interface UniverseState {
 
 type SimState = Record<UniverseId, UniverseState>
 
+type SimAction = SimEvent | { type: 'reset' }
+
 const UNIVERSES: UniverseId[] = ['dark-twin', 'fixed-schedule', 'apollo']
 
 function initialState(): SimState {
@@ -45,7 +47,12 @@ function avgHealth(states: Record<ComponentId, ComponentState>): number {
   return vals.length === 0 ? 1 : vals.reduce((a, b) => a + b, 0) / vals.length
 }
 
-function simReducer(state: SimState, event: SimEvent): SimState {
+function simReducer(state: SimState, action: SimAction): SimState {
+  if (action.type === 'reset') {
+    return initialState()
+  }
+
+  const event = action
   const u = event.universe as UniverseId
   const prev = state[u]
 
@@ -89,13 +96,27 @@ function simReducer(state: SimState, event: SimEvent): SimState {
   }
 }
 
-export function useSim() {
+interface UseSimOptions {
+  /** Playback speed multiplier — 0.2 = 5x slower, 2 = 2x faster. */
+  speed?: number
+  /** Bump to force a fresh stream reconnect from t=0 at the current speed. */
+  restartKey?: number
+}
+
+export function useSim({ speed = 1, restartKey = 0 }: UseSimOptions = {}) {
   const [state, dispatch] = useReducer(simReducer, undefined, initialState)
 
   useEffect(() => {
+    let cancelled = false
+
+    // Fresh playback — wipe accumulated tick history before reconnecting.
+    dispatch({ type: 'reset' })
+
     const sources = UNIVERSES.map((u) => {
-      const es = new EventSource(`/api/sim/stream/${u}`)
+      const url = `/api/sim/stream/${u}?speed=${speed.toFixed(2)}`
+      const es = new EventSource(url)
       es.addEventListener('message', (e) => {
+        if (cancelled) return
         try {
           const event: SimEvent = JSON.parse(e.data)
           dispatch(event)
@@ -106,8 +127,11 @@ export function useSim() {
       return es
     })
 
-    return () => sources.forEach((es) => es.close())
-  }, [])
+    return () => {
+      cancelled = true
+      sources.forEach((es) => es.close())
+    }
+  }, [speed, restartKey])
 
   const masterHealth = useMemo(() => {
     return {
