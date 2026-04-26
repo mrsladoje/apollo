@@ -8,6 +8,8 @@ interface ChatInputProps {
   readonly className?: string
   readonly onSubmit?: (message: string) => void | Promise<void>
   readonly disabled?: boolean
+  readonly onFocus?: () => void
+  readonly onBlur?: () => void
 }
 
 export function ChatInput({
@@ -16,6 +18,8 @@ export function ChatInput({
   onSubmit,
   className,
   disabled,
+  onFocus,
+  onBlur,
 }: ChatInputProps) {
   const [internalValue, setInternalValue] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -106,6 +110,8 @@ export function ChatInput({
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         className='flex-1 resize-none overflow-hidden bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none'
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
       <button
         type='submit'

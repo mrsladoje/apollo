@@ -33,7 +33,7 @@ export function MasterChart({
       <ResponsiveContainer width='100%' height='100%'>
         <AreaChart
           data={chartData}
-          margin={{ top: 4, right: 0, left: -28, bottom: 0 }}
+          margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
         >
           <defs>
             <linearGradient id='healthGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -48,9 +48,10 @@ export function MasterChart({
           <XAxis dataKey='t' tick={false} axisLine={false} tickLine={false} />
           <YAxis
             domain={[0, 1]}
-            tick={{ fontSize: 9, fill: '#666' }}
+            tick={false}
             axisLine={false}
             tickLine={false}
+            width={0}
           />
           <Tooltip
             contentStyle={{
