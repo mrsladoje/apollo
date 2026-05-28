@@ -324,4 +324,4 @@ The saved comparison currently reflects a **10-item smoke run**, not the expande
 
 ---
 
-*Apollo is a hackathon submission for HP's "When AI meets reality" challenge and Major League Hacking's "Best Use of Gemma" track. Built in 36 hours under deliberate scope discipline; defended by 22 ADRs.*
+*Apollo is a hackathon submission for HP's "When AI meets reality" challenge and Major League Hacking's "Best Use of Gemma" track at HackUPC 2026 in Barcelona. Built in 36 hours under deliberate scope discipline; defended by 22 ADRs.*
